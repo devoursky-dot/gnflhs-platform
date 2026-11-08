@@ -112,6 +112,8 @@ export default function App() {
 
   // 일반 유저는 'production'만 보이고, 관리자는 devModeActive 시 'development'도 함께 노출
   const visiblePlugins = plugins.filter((p) => {
+    // 계정관리는 최고관리자 전용 상단바에서만 접근하도록 런처 카드에서 제외
+    if (p.id === 'account-manager') return false;
     if (p.status === 'disabled') return false;
     if (p.status === 'production') return true;
     if (p.status === 'development') {
@@ -266,6 +268,27 @@ export default function App() {
             >
               <Code2 size={15} />
               <span>스튜디오</span>
+            </button>
+
+            <button
+              onClick={() => window.location.href = '/account/'}
+              title="통합 계정관리 센터 (최고관리자 전용)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                backgroundColor: '#1e293b',
+                color: '#34d399',
+                border: '1px solid #059669',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              <Users size={15} />
+              <span>계정 관리</span>
             </button>
 
             <button

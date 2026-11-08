@@ -70,8 +70,21 @@ import {
   ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
-  Check
+  Check,
+  Database,
+  Search,
+  Table
 } from 'lucide-react';
+import {
+  listActiveCollections,
+  registerCustomCollection,
+  subscribeCollection,
+  executeDatabaseQuery,
+  upsertRow,
+  deleteRow,
+  CollectionMeta,
+  DatabaseRowItem
+} from '../services/dbQueryService';
 
 interface PluginDevStudioModalProps {
   isOpen: boolean;
@@ -83,7 +96,7 @@ interface PluginDevStudioModalProps {
   initialProjectId?: string | null;
 }
 
-type StudioSection = 'projects' | 'editor' | 'settings' | 'deployments' | 'executions';
+type StudioSection = 'projects' | 'editor' | 'database' | 'settings' | 'deployments' | 'executions';
 
 interface ExecutionLogItem {
   level: 'log' | 'info' | 'warn' | 'error';
@@ -145,6 +158,27 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
   const [deployVersion, setDeployVersion] = useState<string>('1.1.0');
   const [deployNote, setDeployNote] = useState<string>('');
   const [historyFilterAppId, setHistoryFilterAppId] = useState<string>('all');
+
+  // 데이터베이스 스튜디오 (Supabase / PocketBase 스타일)
+  const [dbCollections, setDbCollections] = useState<CollectionMeta[]>([]);
+  const [selectedColName, setSelectedColName] = useState<string>('plugins');
+  const [colSearchQuery, setColSearchQuery] = useState<string>('');
+  const [colRows, setColRows] = useState<DatabaseRowItem[]>([]);
+  const [dbQueryText, setDbQueryText] = useState<string>('SELECT * FROM plugins LIMIT 50');
+  const [dbQueryOutput, setDbQueryOutput] = useState<{ success: boolean; message: string; elapsed?: number } | null>(null);
+  const [dbIsLoading, setDbIsLoading] = useState<boolean>(false);
+  const [dbViewMode, setDbViewMode] = useState<'table' | 'json'>('table');
+  const [editingRowModal, setEditingRowModal] = useState<{
+    isOpen: boolean;
+    isNew: boolean;
+    docId: string;
+    jsonText: string;
+  }>({
+    isOpen: false,
+    isNew: false,
+    docId: '',
+    jsonText: ''
+  });
 
   const showToast = (msg: string) => {
     setStatusToast(msg);
@@ -621,6 +655,146 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
     showToast('배포본 삭제됨');
   };
 
+  // 데이터베이스 활성 컬렉션 목록 로드
+  useEffect(() => {
+    if (!isOpen || activeSection !== 'database') return;
+    let isMounted = true;
+    listActiveCollections().then((cols) => {
+      if (isMounted) {
+        setDbCollections(cols);
+        if (cols.length > 0 && !cols.some((c) => c.name === selectedColName)) {
+          setSelectedColName(cols[0].name);
+        }
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, activeSection]);
+
+  // 선택된 컬렉션 실시간 구독
+  useEffect(() => {
+    if (!isOpen || activeSection !== 'database' || !selectedColName) return;
+    const unsubscribe = subscribeCollection(selectedColName, (rows) => {
+      setColRows(rows);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [isOpen, activeSection, selectedColName]);
+
+  const handleRunDbQuery = async (customQuery?: string) => {
+    const q = (customQuery || dbQueryText).trim();
+    if (!q) return;
+    setDbIsLoading(true);
+    setDbQueryOutput(null);
+    try {
+      const res = await executeDatabaseQuery(q);
+      setDbQueryOutput({
+        success: res.success,
+        message: res.message,
+        elapsed: res.executionTimeMs
+      });
+      if (res.data) {
+        setColRows(res.data);
+      }
+      const updatedCols = await listActiveCollections();
+      setDbCollections(updatedCols);
+      showToast(res.message);
+    } catch (err: any) {
+      setDbQueryOutput({
+        success: false,
+        message: err?.message || String(err),
+        elapsed: 0
+      });
+    } finally {
+      setDbIsLoading(false);
+    }
+  };
+
+  const handleCreateCollection = async () => {
+    const name = prompt('새 컬렉션(테이블) 이름 입력 (영문/숫자/언더바):');
+    if (!name) return;
+    const clean = name.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (!clean) return;
+    try {
+      await registerCustomCollection(clean);
+      const cols = await listActiveCollections();
+      setDbCollections(cols);
+      setSelectedColName(clean);
+      setDbQueryText(`SELECT * FROM ${clean} LIMIT 50`);
+      showToast(`컬렉션 '${clean}' 등록됨`);
+    } catch (err: any) {
+      alert('컬렉션 생성 실패: ' + (err?.message || err));
+    }
+  };
+
+  const handleOpenAddRowModal = () => {
+    const template = {
+      title: '새 항목',
+      createdAt: Date.now()
+    };
+    setEditingRowModal({
+      isOpen: true,
+      isNew: true,
+      docId: '',
+      jsonText: JSON.stringify(template, null, 2)
+    });
+  };
+
+  const handleOpenEditRowModal = (row: DatabaseRowItem) => {
+    const copy = { ...row };
+    const docId = copy._id;
+    delete copy._id;
+    setEditingRowModal({
+      isOpen: true,
+      isNew: false,
+      docId,
+      jsonText: JSON.stringify(copy, null, 2)
+    });
+  };
+
+  const handleSaveRowModal = async () => {
+    try {
+      let parsed: any;
+      try {
+        parsed = Function(`"use strict"; return (${editingRowModal.jsonText})`)();
+      } catch (e: any) {
+        alert('JSON 형식 오류: ' + e.message);
+        return;
+      }
+      const targetId = editingRowModal.isNew
+        ? (editingRowModal.docId.trim() || null)
+        : editingRowModal.docId;
+      await upsertRow(selectedColName, targetId, parsed);
+      setEditingRowModal({ isOpen: false, isNew: false, docId: '', jsonText: '' });
+      showToast('저장 완료');
+    } catch (err: any) {
+      alert('저장 실패: ' + (err?.message || err));
+    }
+  };
+
+  const handleDeleteRow = async (docId: string) => {
+    if (!confirm(`'${docId}' 문서를 정말 삭제하시겠습니까?`)) return;
+    try {
+      await deleteRow(selectedColName, docId);
+      showToast('삭제 완료');
+    } catch (err: any) {
+      alert('삭제 실패: ' + (err?.message || err));
+    }
+  };
+
+  const colKeys = useMemo(() => {
+    const keys = new Set<string>();
+    keys.add('_id');
+    colRows.slice(0, 50).forEach((row) => {
+      Object.keys(row).forEach((k) => {
+        if (k !== '_id') keys.add(k);
+      });
+    });
+    return Array.from(keys);
+  }, [colRows]);
+
   if (!isOpen) return null;
 
   const getFileIcon = (name: string) => {
@@ -1001,6 +1175,7 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
                 [
                   { id: 'projects', icon: <FolderKanban size={18} />, tip: '프로젝트 보관함 · 운영 앱 복사' },
                   { id: 'editor', icon: <Code2 size={18} />, tip: '코드 편집기 (파일 · 라이브러리 · 서비스)' },
+                  { id: 'database', icon: <Database size={18} />, tip: '데이터베이스 (Supabase / PocketBase 스타일 쿼리 및 테이블 뷰어)' },
                   { id: 'settings', icon: <SlidersHorizontal size={18} />, tip: '프로젝트 설정 · 스크립트 속성 · 반응형 제어' },
                   { id: 'deployments', icon: <Layers size={18} />, tip: '배포 관리 · 버전 롤백' },
                   { id: 'executions', icon: <Terminal size={18} />, tip: '실행 로그 · 캐시 모니터' }
@@ -2194,7 +2369,624 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* ==================== SECTION F: 데이터베이스 & 초고속 쿼리 러너 (Supabase / PocketBase Style) ==================== */}
+          {activeSection === 'database' && (
+            <div style={{ flex: 1, display: 'flex', minWidth: 0, overflow: 'hidden' }}>
+              {/* 1. 좌측 컬렉션(테이블) 사이드바 (220px) */}
+              <div style={{
+                width: '220px',
+                backgroundColor: '#090d16',
+                borderRight: '1px solid #1e293b',
+                display: 'flex',
+                flexDirection: 'column',
+                flexShrink: 0
+              }}>
+                {/* 헤더: 검색 & 추가 버튼 */}
+                <div style={{ padding: '12px 14px', borderBottom: '1px solid #1e293b' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Database size={14} color="#38bdf8" />
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#f1f5f9' }}>컬렉션 목록</span>
+                    </div>
+                    <button
+                      onClick={handleCreateCollection}
+                      title="새 컬렉션(테이블) 생성"
+                      style={{
+                        backgroundColor: '#1e293b',
+                        border: '1px solid #334155',
+                        color: '#38bdf8',
+                        borderRadius: '6px',
+                        padding: '4px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <Plus size={13} />
+                    </button>
+                  </div>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={12} style={{ position: 'absolute', left: '8px', top: '8px', color: '#64748b' }} />
+                    <input
+                      type="text"
+                      placeholder="컬렉션 검색..."
+                      value={colSearchQuery}
+                      onChange={(e) => setColSearchQuery(e.target.value)}
+                      style={{
+                        width: '100%',
+                        backgroundColor: '#0f172a',
+                        border: '1px solid #1e293b',
+                        borderRadius: '6px',
+                        padding: '5px 8px 5px 26px',
+                        fontSize: '11px',
+                        color: '#f1f5f9',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* 컬렉션 목록 리스트 */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
+                  {dbCollections
+                    .filter((c) => !colSearchQuery || c.name.toLowerCase().includes(colSearchQuery.toLowerCase()))
+                    .map((c) => {
+                      const isSelected = selectedColName === c.name;
+                      return (
+                        <button
+                          key={c.name}
+                          onClick={() => {
+                            setSelectedColName(c.name);
+                            setDbQueryText(`SELECT * FROM ${c.name} LIMIT 50`);
+                          }}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '7px 10px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            backgroundColor: isSelected ? '#1e293b' : 'transparent',
+                            color: isSelected ? '#38bdf8' : '#94a3b8',
+                            fontSize: '12px',
+                            fontWeight: isSelected ? 700 : 500,
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            marginBottom: '2px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <Table size={13} color={isSelected ? '#38bdf8' : '#64748b'} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
+                          </div>
+                          {c.isSystem && (
+                            <span
+                              title="시스템 컬렉션"
+                              style={{
+                                fontSize: '9px',
+                                padding: '1px 4px',
+                                borderRadius: '4px',
+                                backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                                color: '#38bdf8',
+                                border: '1px solid rgba(56, 189, 248, 0.2)'
+                              }}
+                            >
+                              SYS
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* 2. 우측 쿼리 콘솔 & 데이터 그리드 (메인) */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, backgroundColor: '#0b101d' }}>
+                {/* 상단 쿼리 에디터 바 (PocketBase / Supabase 스타일) */}
+                <div style={{
+                  padding: '12px 16px',
+                  backgroundColor: '#090d16',
+                  borderBottom: '1px solid #1e293b',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  {/* 템플릿 칩 & 실행 버튼 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>빠른 템플릿:</span>
+                      <button
+                        onClick={() => {
+                          const q = `SELECT * FROM ${selectedColName} LIMIT 50`;
+                          setDbQueryText(q);
+                          handleRunDbQuery(q);
+                        }}
+                        style={{
+                          backgroundColor: '#1e293b',
+                          border: '1px solid #334155',
+                          borderRadius: '5px',
+                          color: '#38bdf8',
+                          fontSize: '11px',
+                          padding: '3px 8px',
+                          cursor: 'pointer',
+                          fontFamily: 'monospace'
+                        }}
+                      >
+                        SELECT *
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDbQueryText(`INSERT INTO ${selectedColName} {\n  "title": "새 항목",\n  "createdAt": ${Date.now()}\n}`);
+                        }}
+                        style={{
+                          backgroundColor: '#1e293b',
+                          border: '1px solid #334155',
+                          borderRadius: '5px',
+                          color: '#34d399',
+                          fontSize: '11px',
+                          padding: '3px 8px',
+                          cursor: 'pointer',
+                          fontFamily: 'monospace'
+                        }}
+                      >
+                        INSERT INTO
+                      </button>
+                      <button
+                        onClick={() => {
+                          const sampleId = colRows[0]?._id || 'doc_id';
+                          setDbQueryText(`UPDATE ${selectedColName} SET status = 'active' WHERE id = '${sampleId}'`);
+                        }}
+                        style={{
+                          backgroundColor: '#1e293b',
+                          border: '1px solid #334155',
+                          borderRadius: '5px',
+                          color: '#fbbf24',
+                          fontSize: '11px',
+                          padding: '3px 8px',
+                          cursor: 'pointer',
+                          fontFamily: 'monospace'
+                        }}
+                      >
+                        UPDATE
+                      </button>
+                      <button
+                        onClick={() => {
+                          const sampleId = colRows[0]?._id || 'doc_id';
+                          setDbQueryText(`DELETE FROM ${selectedColName} WHERE id = '${sampleId}'`);
+                        }}
+                        style={{
+                          backgroundColor: '#1e293b',
+                          border: '1px solid #334155',
+                          borderRadius: '5px',
+                          color: '#f87171',
+                          fontSize: '11px',
+                          padding: '3px 8px',
+                          cursor: 'pointer',
+                          fontFamily: 'monospace'
+                        }}
+                      >
+                        DELETE
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {dbQueryOutput && (
+                        <span style={{
+                          fontSize: '11px',
+                          color: dbQueryOutput.success ? '#34d399' : '#f87171',
+                          fontWeight: 600,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          {dbQueryOutput.success ? <CheckCircle2 size={13} /> : <X size={13} />}
+                          {dbQueryOutput.message}
+                        </span>
+                      )}
+
+                      <button
+                        onClick={() => handleRunDbQuery()}
+                        disabled={dbIsLoading}
+                        title="쿼리 실행 (Ctrl+Enter)"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          backgroundColor: '#0284c7',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '5px 14px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: dbIsLoading ? 'wait' : 'pointer'
+                        }}
+                      >
+                        <Play size={13} fill="#fff" />
+                        <span>{dbIsLoading ? '실행중...' : '실행'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 쿼리 텍스트 입력창 (Ctrl+Enter 지원) */}
+                  <textarea
+                    value={dbQueryText}
+                    onChange={(e) => setDbQueryText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        handleRunDbQuery();
+                      }
+                    }}
+                    rows={2}
+                    placeholder={`SELECT * FROM ${selectedColName} WHERE status = 'production' LIMIT 50`}
+                    style={{
+                      width: '100%',
+                      backgroundColor: '#050811',
+                      border: '1px solid #1e293b',
+                      borderRadius: '6px',
+                      color: '#38bdf8',
+                      fontFamily: 'Consolas, "Fira Code", monospace',
+                      fontSize: '12px',
+                      padding: '8px 10px',
+                      outline: 'none',
+                      resize: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {/* 데이터 그리드 툴바 */}
+                <div style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#0f172a',
+                  borderBottom: '1px solid #1e293b',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#f1f5f9' }}>
+                      {selectedColName}
+                    </span>
+                    <span style={{
+                      fontSize: '11px',
+                      color: '#94a3b8',
+                      backgroundColor: '#1e293b',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontWeight: 600
+                    }}>
+                      {colRows.length}개 문서 (행)
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', backgroundColor: '#1e293b', borderRadius: '6px', padding: '2px', border: '1px solid #334155' }}>
+                      <button
+                        onClick={() => setDbViewMode('table')}
+                        title="테이블 표 형식 보기"
+                        style={{
+                          backgroundColor: dbViewMode === 'table' ? '#0284c7' : 'transparent',
+                          color: dbViewMode === 'table' ? '#fff' : '#94a3b8',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Table size={13} />
+                        <span>표</span>
+                      </button>
+                      <button
+                        onClick={() => setDbViewMode('json')}
+                        title="JSON 트리 형식 보기"
+                        style={{
+                          backgroundColor: dbViewMode === 'json' ? '#0284c7' : 'transparent',
+                          color: dbViewMode === 'json' ? '#fff' : '#94a3b8',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Braces size={13} />
+                        <span>JSON</span>
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={handleOpenAddRowModal}
+                      title="새 행(문서) 추가"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        backgroundColor: '#1e293b',
+                        border: '1px solid #334155',
+                        color: '#34d399',
+                        borderRadius: '6px',
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Plus size={13} />
+                      <span>새 행 추가</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 데이터 그리드 뷰 (표 or JSON) */}
+                <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+                  {dbViewMode === 'json' ? (
+                    <pre style={{
+                      margin: 0,
+                      padding: '16px',
+                      color: '#a5b4fc',
+                      fontFamily: 'Consolas, monospace',
+                      fontSize: '12px',
+                      backgroundColor: '#050811',
+                      minHeight: '100%',
+                      boxSizing: 'border-box'
+                    }}>
+                      {JSON.stringify(colRows, null, 2)}
+                    </pre>
+                  ) : (
+                    <table style={{
+                      width: '100%',
+                      borderCollapse: 'collapse',
+                      fontSize: '12px',
+                      textAlign: 'left'
+                    }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#090d16', borderBottom: '1px solid #1e293b', position: 'sticky', top: 0, zIndex: 10 }}>
+                          <th style={{ padding: '8px 12px', color: '#64748b', fontWeight: 600, width: '90px' }}>동작</th>
+                          {colKeys.map((k) => (
+                            <th key={k} style={{ padding: '8px 12px', color: '#94a3b8', fontWeight: 600, borderLeft: '1px solid #1e293b' }}>
+                              {k}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {colRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={colKeys.length + 1} style={{ padding: '40px', textAlign: 'center', color: '#475569' }}>
+                              조회된 데이터가 없습니다.
+                            </td>
+                          </tr>
+                        ) : (
+                          colRows.map((row, rIdx) => (
+                            <tr
+                              key={row._id || rIdx}
+                              style={{
+                                borderBottom: '1px solid #1e293b',
+                                backgroundColor: rIdx % 2 === 0 ? '#0b101d' : '#0e1424',
+                                transition: 'background-color 0.15s'
+                              }}
+                            >
+                              <td style={{ padding: '6px 12px', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <button
+                                    onClick={() => handleOpenEditRowModal(row)}
+                                    title="행 수정 (JSON)"
+                                    style={{
+                                      backgroundColor: 'transparent',
+                                      border: 'none',
+                                      color: '#38bdf8',
+                                      cursor: 'pointer',
+                                      padding: '3px',
+                                      display: 'flex'
+                                    }}
+                                  >
+                                    <Pencil size={13} />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(JSON.stringify(row, null, 2));
+                                      showToast('JSON 복사됨');
+                                    }}
+                                    title="행 JSON 복사"
+                                    style={{
+                                      backgroundColor: 'transparent',
+                                      border: 'none',
+                                      color: '#94a3b8',
+                                      cursor: 'pointer',
+                                      padding: '3px',
+                                      display: 'flex'
+                                    }}
+                                  >
+                                    <Copy size={13} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteRow(row._id)}
+                                    title="행 삭제"
+                                    style={{
+                                      backgroundColor: 'transparent',
+                                      border: 'none',
+                                      color: '#f87171',
+                                      cursor: 'pointer',
+                                      padding: '3px',
+                                      display: 'flex'
+                                    }}
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </td>
+                              {colKeys.map((k) => {
+                                const val = row[k];
+                                let renderedVal: React.ReactNode;
+                                if (val === undefined || val === null) {
+                                  renderedVal = <span style={{ color: '#475569', fontStyle: 'italic' }}>null</span>;
+                                } else if (typeof val === 'boolean') {
+                                  renderedVal = <span style={{ color: val ? '#4ade80' : '#f87171', fontWeight: 600 }}>{String(val)}</span>;
+                                } else if (typeof val === 'number') {
+                                  renderedVal = <span style={{ color: '#38bdf8' }}>{val}</span>;
+                                } else if (typeof val === 'object') {
+                                  renderedVal = <span style={{ color: '#c084fc', fontFamily: 'monospace' }}>{JSON.stringify(val).slice(0, 50)}</span>;
+                                } else {
+                                  const str = String(val);
+                                  renderedVal = <span style={{ color: '#f1f5f9' }}>{str.length > 60 ? str.slice(0, 60) + '...' : str}</span>;
+                                }
+                                return (
+                                  <td
+                                    key={k}
+                                    style={{
+                                      padding: '6px 12px',
+                                      borderLeft: '1px solid #1e293b',
+                                      maxWidth: '260px',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    {renderedVal}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* 행 추가/수정 모달 */}
+        {editingRowModal.isOpen && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100
+          }}>
+            <div style={{
+              width: '520px',
+              backgroundColor: '#0f172a',
+              border: '1px solid #334155',
+              borderRadius: '12px',
+              padding: '20px',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.8)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: '#f1f5f9' }}>
+                  {editingRowModal.isNew ? '새 문서(행) 추가' : `문서 편집 (${editingRowModal.docId})`}
+                </span>
+                <button
+                  onClick={() => setEditingRowModal({ isOpen: false, isNew: false, docId: '', jsonText: '' })}
+                  style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer' }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {editingRowModal.isNew && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                    문서 ID (비워두면 자동 생성):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="자동 생성"
+                    value={editingRowModal.docId}
+                    onChange={(e) => setEditingRowModal((prev) => ({ ...prev, docId: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      backgroundColor: '#020617',
+                      border: '1px solid #1e293b',
+                      borderRadius: '6px',
+                      padding: '6px 10px',
+                      color: '#f1f5f9',
+                      fontSize: '12px',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                  필드 데이터 (JSON 객체):
+                </label>
+                <textarea
+                  rows={10}
+                  value={editingRowModal.jsonText}
+                  onChange={(e) => setEditingRowModal((prev) => ({ ...prev, jsonText: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#020617',
+                    border: '1px solid #1e293b',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    color: '#38bdf8',
+                    fontFamily: 'Consolas, monospace',
+                    fontSize: '12px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+                <button
+                  onClick={() => setEditingRowModal({ isOpen: false, isNew: false, docId: '', jsonText: '' })}
+                  style={{
+                    backgroundColor: '#1e293b',
+                    border: '1px solid #334155',
+                    color: '#94a3b8',
+                    borderRadius: '6px',
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleSaveRowModal}
+                  style={{
+                    backgroundColor: '#0284c7',
+                    border: 'none',
+                    color: '#fff',
+                    borderRadius: '6px',
+                    padding: '6px 16px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  저장
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
