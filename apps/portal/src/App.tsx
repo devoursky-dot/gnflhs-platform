@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, loginWithGoogle, logout, isSuperAdmin, SUPER_ADMIN_EMAIL } from '@gnflhs/shared-auth';
+import { auth, loginWithGoogle, logout, isSuperAdmin, SUPER_ADMIN_EMAIL, checkRedirectResult } from '@gnflhs/shared-auth';
 import { AppPlugin } from '@gnflhs/shared-types';
 import { subscribePlugins } from './services/pluginService';
 import { PluginManagerModal } from './components/PluginManagerModal';
@@ -37,6 +37,7 @@ export default function App() {
   const [activeDynamicPlugin, setActiveDynamicPlugin] = useState<AppPlugin | null>(null);
 
   useEffect(() => {
+    checkRedirectResult().catch(console.error);
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
     });
@@ -48,6 +49,15 @@ export default function App() {
       unsubPlugins();
     };
   }, []);
+
+  const handleLogin = async () => {
+    try {
+      await loginWithGoogle();
+    } catch (error: any) {
+      console.error('Google login error:', error);
+      alert(`로그인 오류 (${error.code || 'unknown'}): ${error.message || error}`);
+    }
+  };
 
   const isAdmin = isSuperAdmin(currentUser);
 
@@ -127,7 +137,7 @@ export default function App() {
             </div>
           ) : (
             <button
-              onClick={() => loginWithGoogle()}
+              onClick={handleLogin}
               style={{
                 display: 'flex',
                 alignItems: 'center',

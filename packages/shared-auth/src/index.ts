@@ -36,11 +36,22 @@ export async function loginWithGoogle() {
     return result.user;
   } catch (error: any) {
     console.warn("Google popup login fallback:", error);
-    if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/cancelled-popup-request') {
+    if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/cancelled-popup-request' || error?.code === 'auth/popup-closed-by-user') {
       await signInWithRedirect(auth, googleProvider);
       return null;
     }
     throw error;
+  }
+}
+
+// 리디렉션 로그인 결과 확인
+export async function checkRedirectResult() {
+  try {
+    const result = await getRedirectResult(auth);
+    return result?.user || null;
+  } catch (error) {
+    console.error("Redirect login result error:", error);
+    return null;
   }
 }
 
