@@ -66,11 +66,15 @@ export const SEATING_CONFIG = Object.freeze({
   deskShiftStep: clampFloat(env.float('DESK_SHIFT_STEP', 0.5), 0.5, 0.25, 1.0),
   minDeskSlotSpan: clampFloat(env.float('MIN_DESK_SLOT_SPAN', 1.0), 1.0, 0.5, 2.0),
 
-  printTwoLineFontPx: clampInt(env.int('PRINT_TWOLINE_FONT_PX', 26), 26, 14, 42),
-  printOneLineFontPx: clampInt(env.int('PRINT_ONELINE_FONT_PX', 21), 21, 12, 36),
-  printMinFontPx: clampInt(env.int('PRINT_MIN_FONT_PX', 11), 11, 8, 18),
-  printCardInnerWidthPx: clampInt(env.int('PRINT_CARD_INNER_WIDTH_PX', 82), 82, 50, 150),
-  printMinSingleLineNamePx: clampInt(env.int('PRINT_MIN_SINGLELINE_NAME_PX', 44), 44, 28, 100),
+  printPageWidthMm: clampFloat(env.float('PRINT_PAGE_WIDTH_MM', 287), 287, 260, 294),
+  printPageHeightMm: clampFloat(env.float('PRINT_PAGE_HEIGHT_MM', 202), 202, 180, 206),
+  printRosterWidthPx: clampInt(env.int('PRINT_ROSTER_WIDTH_PX', 84), 84, 68, 130),
+  printMinAisleGapPx: clampInt(env.int('PRINT_MIN_AISLE_GAP_PX', 20), 20, 12, 60),
+  printTwoLineFontPx: clampInt(env.int('PRINT_TWOLINE_FONT_PX', 44), 44, 16, 60),
+  printOneLineFontPx: clampInt(env.int('PRINT_ONELINE_FONT_PX', 34), 34, 14, 52),
+  printMinFontPx: clampInt(env.int('PRINT_MIN_FONT_PX', 12), 12, 8, 22),
+  printCardInnerWidthPx: clampInt(env.int('PRINT_CARD_INNER_WIDTH_PX', 82), 82, 50, 240),
+  printMinSingleLineNamePx: clampInt(env.int('PRINT_MIN_SINGLELINE_NAME_PX', 44), 44, 28, 160),
 
   sampleStudentNames: safeNameList('SAMPLE_STUDENT_NAMES', FALLBACK_SAMPLE_NAMES)
 });
