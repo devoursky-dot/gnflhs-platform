@@ -1,6 +1,6 @@
 import { collection, doc, getDocs, setDoc, onSnapshot } from 'firebase/firestore';
-import { db } from '../../../../packages/shared-auth/src/index';
-import { AppPlugin } from '../../../../packages/shared-types/src/index';
+import { db } from '@gnflhs/shared-auth';
+import { AppPlugin } from '@gnflhs/shared-types';
 
 const PLUGINS_COLLECTION = 'plugins';
 

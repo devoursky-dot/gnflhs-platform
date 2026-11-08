@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Home, ShieldAlert, Award, Plus, Calendar, User, Search, CheckCircle2 } from 'lucide-react';
-import { DormitoryPenaltyRecord } from '../../../../packages/shared-types/src/index';
+import { DormitoryPenaltyRecord } from '@gnflhs/shared-types';
 
 const SAMPLE_RECORDS: DormitoryPenaltyRecord[] = [
   { id: '1', studentId: '10101', studentName: '홍길동', room: '301호', points: 2, reason: '점호 시간 지각 (10분)', supervisorName: '사감교사', date: '2026-11-07', createdAt: Date.now() },

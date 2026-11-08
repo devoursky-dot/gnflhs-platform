@@ -1,6 +1,6 @@
 import { collection, doc, getDocs, writeBatch, setDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
-import { db } from '../../../../packages/shared-auth/src/index';
-import { UserAccount, UserRole } from '../../../../packages/shared-types/src/index';
+import { db } from '@gnflhs/shared-auth';
+import { UserAccount, UserRole } from '@gnflhs/shared-types';
 
 const USERS_COLLECTION = 'users';
 

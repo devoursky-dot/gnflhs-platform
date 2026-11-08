@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SuperAdminGuard } from './components/SuperAdminGuard';
 import { GoogleSheetPasteModal } from './components/GoogleSheetPasteModal';
 import { fetchAllUsers, deleteUser } from './services/accountService';
-import { UserAccount } from '../../../../packages/shared-types/src/index';
+import { UserAccount } from '@gnflhs/shared-types';
 import { Users, ClipboardPaste, Search, Trash2, Home, Filter, ShieldCheck, GraduationCap, School } from 'lucide-react';
 
 export default function App() {

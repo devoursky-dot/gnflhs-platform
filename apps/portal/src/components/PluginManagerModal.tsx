@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AppPlugin, PluginStatus } from '../../../../packages/shared-types/src/index';
+import { AppPlugin, PluginStatus } from '@gnflhs/shared-types';
 import { updatePlugin, seedDefaultPlugins } from '../services/pluginService';
 import { Puzzle, X, Plus, ToggleLeft, ToggleRight, Sparkles, RefreshCw } from 'lucide-react';
 

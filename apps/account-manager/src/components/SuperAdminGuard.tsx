@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, isSuperAdmin, loginWithGoogle, SUPER_ADMIN_EMAIL } from '../../../../packages/shared-auth/src/index';
+import { auth, isSuperAdmin, loginWithGoogle, SUPER_ADMIN_EMAIL } from '@gnflhs/shared-auth';
 import { ShieldAlert, LogIn, Lock } from 'lucide-react';
 
 interface SuperAdminGuardProps {

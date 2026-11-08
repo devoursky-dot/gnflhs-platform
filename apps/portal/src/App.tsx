@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, loginWithGoogle, logout, isSuperAdmin, SUPER_ADMIN_EMAIL } from '../../../../packages/shared-auth/src/index';
-import { AppPlugin } from '../../../../packages/shared-types/src/index';
+import { auth, loginWithGoogle, logout, isSuperAdmin, SUPER_ADMIN_EMAIL } from '@gnflhs/shared-auth';
+import { AppPlugin } from '@gnflhs/shared-types';
 import { subscribePlugins } from './services/pluginService';
 import { PluginManagerModal } from './components/PluginManagerModal';
 import { LayoutGrid, LogIn, LogOut, ShieldCheck, PenTool, Users, ShieldAlert, Puzzle, Sparkles, ExternalLink, RefreshCw } from 'lucide-react';
