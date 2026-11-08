@@ -1,23 +1,23 @@
 /**
  * GNFLHS 스마트 교실 좌석배치도 애플리케이션
  * 1. 하단 교탁 기준점 (교사 시점)
- * 2. 처음 만들 때 1회 팝업으로 기본 구조(분단수/줄수/책상수) 설정
- * 3. 가장 많은 책상을 기준으로 분단 폭 자동 조정
- * 4. 책상 위치 조절: 비어있는 칸 이동 & 두 책상의 중간(센터) 배치
- * 5. 다중 탭 관리 시스템 & 탭 이름 실시간 변경
- * 6. 기기 로컬 캐시 100% 무손실 실시간 자동 저장
- * 7. 수업용 출석 명렬표 (총원 입력 시 자동 생성, 번호 자동입력 체크, 일괄 붙여넣기, 드래그 배정)
+ * 2. [좌석조절 모드] vs [수업/배치 완료 모드] 단계별 분리 & 좌석위치마감
+ * 3. 분단 상단에서 가로줄수 & 최대책상수 통합 정의
+ * 4. 0.5칸(반 칸) 단위 이동 & 1칸 공간 미확보 시 추가버튼 자동 비활성화
+ * 5. 명렬표 기본 배치 & A4 인쇄 시 명렬표 포함/제외 선택 옵션
+ * 6. 다중 탭 관리 시스템 & 탭 이름 실시간 변경
+ * 7. 기기 로컬 캐시 100% 무손실 실시간 자동 저장
  */
 
 const STORAGE_KEY = 'gnflhs_seating_app_v1';
 
-// 기본 탭 구조 생성 (초기 마법사 파라미터 적용)
+// 기본 탭 구조 생성
 function createDefaultTab(
   title = '1학년 2반 일반배치',
   className = '1학년 2반',
   zoneCount = 3,
   rowCount = 4,
-  deskCount = 2,
+  maxDesks = 2,
   totalStudents = 24
 ) {
   const tabId = 'tab_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
@@ -26,12 +26,12 @@ function createDefaultTab(
     id: `zone_${zIdx}_${Date.now()}`,
     name: `${zIdx + 1}분단`,
     rowCount: rowCount,
+    maxDesks: maxDesks, // 분단 상단에서 정하는 최대 책상 수
     rows: Array.from({ length: rowCount }).map((_, rIdx) => ({
       id: `row_${zIdx}_${rIdx}_${Date.now()}`,
-      deskCount: deskCount,
-      align: 'left', // 'left' | 'center' (중간) | 'right' | 'split'
-      desks: Array.from({ length: deskCount }).map((_, dIdx) => ({
+      desks: Array.from({ length: maxDesks }).map((_, dIdx) => ({
         id: `desk_${zIdx}_${rIdx}_${dIdx}_${Date.now()}`,
+        pos: dIdx * 1.0, // 슬롯 위치 (0.0, 0.5, 1.0, 1.5...)
         studentNo: '',
         studentName: ''
       }))
@@ -57,6 +57,7 @@ function createDefaultTab(
     className,
     totalCount: totalStudents,
     autoNumber: true,
+    isEditMode: false, // 기본은 깔끔한 수업/배치 모드
     zones,
     roster
   };
@@ -65,7 +66,8 @@ function createDefaultTab(
 let appState = {
   activeTabId: '',
   tabs: [],
-  rosterOpen: true
+  isEditMode: false,
+  rosterOpen: true // 명렬표 기본 배치 (열림 상태)
 };
 
 // 1. 상태 로드 및 로컬 캐시 초기화
@@ -78,6 +80,7 @@ function loadState() {
         appState.tabs = parsed.tabs;
         appState.activeTabId = parsed.activeTabId || parsed.tabs[0].id;
         appState.rosterOpen = parsed.rosterOpen !== undefined ? parsed.rosterOpen : true;
+        appState.isEditMode = parsed.isEditMode || false;
         return;
       }
     }
@@ -85,11 +88,12 @@ function loadState() {
     console.warn('Failed to load local seating state:', e);
   }
 
-  // 초기 탭 생성
   const tab1 = createDefaultTab('1학년 2반 일반배치', '1학년 2반', 3, 4, 2, 24);
   const tab2 = createDefaultTab('모둠 활동형 배치', '1학년 2반 (모둠)', 2, 3, 3, 24);
   appState.tabs = [tab1, tab2];
   appState.activeTabId = tab1.id;
+  appState.isEditMode = false;
+  appState.rosterOpen = true;
 }
 
 // 2. 실시간 로컬 캐시 자동 저장
@@ -98,7 +102,8 @@ function saveState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       activeTabId: appState.activeTabId,
       tabs: appState.tabs,
-      rosterOpen: appState.rosterOpen
+      rosterOpen: appState.rosterOpen,
+      isEditMode: appState.isEditMode
     }));
 
     if (window.GNFLHS && window.GNFLHS.db) {
@@ -119,7 +124,54 @@ function getActiveTab() {
   return appState.tabs.find((t) => t.id === appState.activeTabId) || appState.tabs[0];
 }
 
-// ===================== 3. UI 렌더링 엔진 =====================
+// ===================== 3. 0.5칸 기하학 및 1칸 공간 계산 엔진 =====================
+
+// 특정 줄에서 연속된 1.0칸(책상 1개가 들어갈 수 있는 공간)이 존재하는지 검사
+function findAvailableSlotForNewDesk(row, maxDesks) {
+  const sorted = [...row.desks].sort((a, b) => a.pos - b.pos);
+  
+  // 1. 첫 책상 앞 공간
+  if (sorted.length === 0) return 0.0;
+  if (sorted[0].pos >= 1.0) return 0.0;
+
+  // 2. 책상들 사이 공간
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const endCurrent = sorted[i].pos + 1.0;
+    const startNext = sorted[i + 1].pos;
+    if (startNext - endCurrent >= 1.0) {
+      return endCurrent;
+    }
+  }
+
+  // 3. 마지막 책상 뒤 공간
+  const lastEnd = sorted[sorted.length - 1].pos + 1.0;
+  if (maxDesks - lastEnd >= 1.0) {
+    return lastEnd;
+  }
+
+  return null; // 1칸 공간 없음 (추가 불가)
+}
+
+// 반 칸(0.5칸) 이동 가능 여부 검사 및 이동 실행
+function shiftDeskPosition(row, desk, delta, maxDesks) {
+  const nextPos = desk.pos + delta;
+  if (nextPos < 0 || nextPos + 1.0 > maxDesks) return false;
+
+  const otherDesks = row.desks.filter((d) => d.id !== desk.id);
+  // 충돌 검사 (다른 책상과 겹치는지 확인)
+  const isOverlapping = otherDesks.some((other) => {
+    return Math.max(nextPos, other.pos) < Math.min(nextPos + 1.0, other.pos + 1.0);
+  });
+
+  if (isOverlapping) return false;
+
+  desk.pos = nextPos;
+  saveState();
+  renderCanvas();
+  return true;
+}
+
+// ===================== 4. UI 렌더링 엔진 =====================
 
 // (1) 탭 바 렌더링
 function renderTabs() {
@@ -192,6 +244,16 @@ function renderCanvas() {
   const tab = getActiveTab();
   if (!tab) return;
 
+  // 편집 모드 클래스 반영
+  if (appState.isEditMode) {
+    document.body.classList.add('edit-mode');
+    document.getElementById('editModeLabel').textContent = '좌석 위치 마감 (완료)';
+  } else {
+    document.body.classList.remove('edit-mode');
+    document.getElementById('editModeLabel').textContent = '좌석 조절 모드';
+  }
+
+  // 하단 교탁 이름 반영
   const teacherNameEl = document.getElementById('teacherClassName');
   if (teacherNameEl) {
     teacherNameEl.textContent = `${tab.className} 교탁`;
@@ -201,14 +263,14 @@ function renderCanvas() {
   container.innerHTML = '';
 
   tab.zones.forEach((zone, zIdx) => {
-    // 분단 내에서 가장 많은 책상 개수 계산 (분단 폭 결정)
-    const maxDesksInZone = Math.max(1, ...zone.rows.map((r) => r.desks.length));
+    const maxDesks = zone.maxDesks || 2;
+    // 책상 1개 너비 90px, 간격 10px ➔ 슬롯당 100px
+    const trackWidth = maxDesks * 100 + 4;
 
     const zoneCol = document.createElement('div');
     zoneCol.className = 'zone-column';
     zoneCol.dataset.zoneId = zone.id;
-    // 가장 많은 책상을 기준으로 분단 폭을 자동 조절 (책상 90px + gap 10px + padding 24px)
-    zoneCol.style.minWidth = `${maxDesksInZone * 100 + 14}px`;
+    zoneCol.style.minWidth = `${trackWidth + 24}px`;
 
     // 분단 헤더
     const header = document.createElement('div');
@@ -217,39 +279,46 @@ function renderCanvas() {
     const titleDiv = document.createElement('div');
     titleDiv.className = 'zone-title';
     titleDiv.textContent = `${zone.name || `${zIdx + 1}분단`}`;
+    header.appendChild(titleDiv);
 
-    // 분단 행(줄) 수 스피너
+    // [좌석 조절 모드] 일 때만 분단 헤더에 [가로줄 수] & [최대 책상 수] 스피너 노출
+    const steppersWrap = document.createElement('div');
+    steppersWrap.className = 'zone-header-steppers edit-only';
+
+    // 1. 가로줄 수 스피너
     const rowStepper = document.createElement('div');
-    rowStepper.className = 'row-stepper';
-    rowStepper.title = `${zone.name} 전체 줄 수 조절`;
+    rowStepper.className = 'header-stepper-item';
+    rowStepper.title = '이 분단의 가로줄 수 조절';
+    rowStepper.innerHTML = `
+      <span class="lbl">줄수:</span>
+      <button class="btn-minus">-</button>
+      <span class="val">${zone.rowCount}</span>
+      <button class="btn-plus">+</button>
+    `;
+    rowStepper.querySelector('.btn-minus').onclick = () => changeZoneRowCount(zone, -1);
+    rowStepper.querySelector('.btn-plus').onclick = () => changeZoneRowCount(zone, 1);
+    steppersWrap.appendChild(rowStepper);
 
-    const minusBtn = document.createElement('button');
-    minusBtn.textContent = '-';
-    minusBtn.onclick = (e) => {
-      e.stopPropagation();
-      changeZoneRowCount(zone, -1);
-    };
+    // 2. 최대 책상 수 스피너
+    const maxDeskStepper = document.createElement('div');
+    maxDeskStepper.className = 'header-stepper-item';
+    maxDeskStepper.title = '이 분단의 최대 책상 수 조절 (분단 폭 결정)';
+    maxDeskStepper.innerHTML = `
+      <span class="lbl">최대책상:</span>
+      <button class="btn-minus">-</button>
+      <span class="val">${maxDesks}</span>
+      <button class="btn-plus">+</button>
+    `;
+    maxDeskStepper.querySelector('.btn-minus').onclick = () => changeZoneMaxDesks(zone, -1);
+    maxDeskStepper.querySelector('.btn-plus').onclick = () => changeZoneMaxDesks(zone, 1);
+    steppersWrap.appendChild(maxDeskStepper);
 
-    const countVal = document.createElement('span');
-    countVal.textContent = String(zone.rowCount);
-
-    const plusBtn = document.createElement('button');
-    plusBtn.textContent = '+';
-    plusBtn.onclick = (e) => {
-      e.stopPropagation();
-      changeZoneRowCount(zone, 1);
-    };
-
-    rowStepper.appendChild(minusBtn);
-    rowStepper.appendChild(countVal);
-    rowStepper.appendChild(plusBtn);
-
+    // 분단 삭제 버튼
     const delZoneBtn = document.createElement('button');
-    delZoneBtn.className = 'zone-del-btn';
+    delZoneBtn.className = 'zone-del-btn edit-only';
     delZoneBtn.innerHTML = '✕';
     delZoneBtn.title = '이 분단 삭제';
-    delZoneBtn.onclick = (e) => {
-      e.stopPropagation();
+    delZoneBtn.onclick = () => {
       if (tab.zones.length <= 1) {
         alert('최소 1개 이상의 분단이 유지되어야 합니다.');
         return;
@@ -258,10 +327,9 @@ function renderCanvas() {
       saveState();
       renderCanvas();
     };
+    steppersWrap.appendChild(delZoneBtn);
 
-    header.appendChild(titleDiv);
-    header.appendChild(rowStepper);
-    header.appendChild(delZoneBtn);
+    header.appendChild(steppersWrap);
     zoneCol.appendChild(header);
 
     // 각 가로줄 (Row) 렌더링
@@ -270,137 +338,41 @@ function renderCanvas() {
       rowEl.className = 'zone-row';
       rowEl.dataset.rowId = row.id;
 
-      // 줄별 책상 수 스피너
-      const deskStepper = document.createElement('div');
-      deskStepper.className = 'row-stepper';
-      deskStepper.title = `${rIdx + 1}번째 줄 책상 개수 조절`;
-
-      const deskMinus = document.createElement('button');
-      deskMinus.textContent = '-';
-      deskMinus.onclick = (e) => {
-        e.stopPropagation();
-        changeRowDeskCount(zone, row, -1);
-      };
-
-      const deskVal = document.createElement('span');
-      deskVal.textContent = String(row.desks.length);
-
-      const deskPlus = document.createElement('button');
-      deskPlus.textContent = '+';
-      deskPlus.onclick = (e) => {
-        e.stopPropagation();
-        changeRowDeskCount(zone, row, 1);
-      };
-
-      deskStepper.appendChild(deskMinus);
-      deskStepper.appendChild(deskVal);
-      deskStepper.appendChild(deskPlus);
-      rowEl.appendChild(deskStepper);
-
-      // 위치 조절 정렬 필 (좌측 / 두 책상의 중간 / 우측 / 양끝)
-      // 책상이 분단 최대치보다 적을 때 위치를 선택할 수 있게 제공
-      if (row.desks.length < maxDesksInZone && row.desks.length > 0) {
-        const alignPill = document.createElement('div');
-        alignPill.className = 'row-align-pill';
-        alignPill.title = '해당 줄 책상 위치 정렬';
-
-        const currentAlign = row.align || 'left';
-
-        const btnLeft = document.createElement('button');
-        btnLeft.className = `row-align-btn ${currentAlign === 'left' ? 'active' : ''}`;
-        btnLeft.textContent = '좌';
-        btnLeft.title = '좌측 정렬';
-        btnLeft.onclick = () => {
-          row.align = 'left';
-          saveState();
-          renderCanvas();
-        };
-
-        const btnCenter = document.createElement('button');
-        btnCenter.className = `row-align-btn ${currentAlign === 'center' ? 'active' : ''}`;
-        btnCenter.textContent = '중간';
-        btnCenter.title = '두 책상의 중간(정중앙)에 배치';
-        btnCenter.onclick = () => {
-          row.align = 'center';
-          saveState();
-          renderCanvas();
-        };
-
-        const btnRight = document.createElement('button');
-        btnRight.className = `row-align-btn ${currentAlign === 'right' ? 'active' : ''}`;
-        btnRight.textContent = '우';
-        btnRight.title = '우측 정렬';
-        btnRight.onclick = () => {
-          row.align = 'right';
-          saveState();
-          renderCanvas();
-        };
-
-        alignPill.appendChild(btnLeft);
-        alignPill.appendChild(btnCenter);
-        alignPill.appendChild(btnRight);
-        rowEl.appendChild(alignPill);
-      }
-
-      // 책상 래퍼 (정렬 클래스 결합)
-      const desksWrap = document.createElement('div');
-      const alignClass = row.align === 'center' ? 'align-center' : row.align === 'right' ? 'align-right' : '';
-      desksWrap.className = `desks-wrap ${alignClass}`;
+      // 책상들이 0.5칸 단위로 놓이는 트랙 영역
+      const desksTrack = document.createElement('div');
+      desksTrack.className = 'desks-track';
+      desksTrack.style.width = `${trackWidth}px`;
 
       // 책상 렌더링
-      row.desks.forEach((desk, dIdx) => {
-        const deskCard = createDeskCardElement(zone, row, desk, dIdx);
-        desksWrap.appendChild(deskCard);
+      row.desks.forEach((desk) => {
+        const deskCard = createDeskCardElement(zone, row, desk, maxDesks);
+        desksTrack.appendChild(deskCard);
       });
 
-      // 만약 분단의 최대 책상보다 줄의 책상이 적고 '좌측 정렬'인 경우, 뒤에 빈 칸(Empty Slot)을 렌더링
-      // 책상을 마우스로 빈 칸에 옮겨놓을 수 있는 드롭 타겟 제공
-      if (row.align === 'left' && row.desks.length < maxDesksInZone) {
-        const emptySlotsCount = maxDesksInZone - row.desks.length;
-        for (let s = 0; s < emptySlotsCount; s++) {
-          const emptySlot = document.createElement('div');
-          emptySlot.className = 'desk-slot-empty';
-          emptySlot.textContent = '+ 빈자리';
-          emptySlot.title = '책상을 이 빈 칸으로 드래그하여 옮길 수 있습니다';
+      rowEl.appendChild(desksTrack);
 
-          // 빈 칸 드래그오버 & 드롭 핸들러
-          emptySlot.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            emptySlot.classList.add('drag-over');
-          });
-          emptySlot.addEventListener('dragleave', () => {
-            emptySlot.classList.remove('drag-over');
-          });
-          emptySlot.addEventListener('drop', (e) => {
-            e.preventDefault();
-            emptySlot.classList.remove('drag-over');
-            const raw = e.dataTransfer.getData('text/plain');
-            if (!raw) return;
-            try {
-              const data = JSON.parse(raw);
-              if (data.type === 'DESK_SWAP') {
-                moveDeskToRow(data.sourceDeskId, row);
-              } else if (data.type === 'ROSTER_ASSIGN') {
-                // 명렬표 학생을 새 책상으로 빈 자리에 추가 배정
-                const newDesk = {
-                  id: `desk_${row.id}_${Date.now()}`,
-                  studentNo: String(data.no),
-                  studentName: data.name
-                };
-                row.desks.push(newDesk);
-                row.deskCount = row.desks.length;
-                saveState();
-                renderCanvas();
-                renderRoster();
-              }
-            } catch (err) {}
-          });
-
-          desksWrap.appendChild(emptySlot);
+      // [조절 모드 전용] 1칸 공간이 남아있을 때만 [➕ 추가] 버튼 노출!
+      if (appState.isEditMode) {
+        const availableSlot = findAvailableSlotForNewDesk(row, maxDesks);
+        if (availableSlot !== null) {
+          const addBtn = document.createElement('button');
+          addBtn.className = 'row-add-desk-btn edit-only';
+          addBtn.innerHTML = '+ 추가';
+          addBtn.title = '이 줄에 책상 1개 추가';
+          addBtn.onclick = () => {
+            row.desks.push({
+              id: `desk_${row.id}_${Date.now()}`,
+              pos: availableSlot,
+              studentNo: '',
+              studentName: ''
+            });
+            saveState();
+            renderCanvas();
+          };
+          rowEl.appendChild(addBtn);
         }
       }
 
-      rowEl.appendChild(desksWrap);
       zoneCol.appendChild(rowEl);
     });
 
@@ -411,53 +383,86 @@ function renderCanvas() {
 }
 
 // 개별 책상 카드 엘리먼트 생성
-function createDeskCardElement(zone, row, desk, dIdx) {
+function createDeskCardElement(zone, row, desk, maxDesks) {
   const card = document.createElement('div');
   const hasStudent = desk.studentName && desk.studentName.trim() !== '';
   card.className = `desk-card ${hasStudent ? 'assigned' : ''}`;
   card.dataset.deskId = desk.id;
-  card.draggable = true;
+  card.draggable = !appState.isEditMode; // 조절 모드가 아닐 때만 자리배치 드래그 가능
 
+  // 슬롯 위치 기반 정밀 배치: pos * 100px (0.5 단위 지원)
+  const leftPx = (desk.pos || 0) * 100;
+  card.style.left = `${leftPx}px`;
+
+  // 상단 바: 번호 뱃지 + [조절 모드 시 삭제 ✕ 버튼]
   const topBar = document.createElement('div');
   topBar.className = 'desk-top-bar';
 
   const noBadge = document.createElement('span');
   noBadge.className = 'desk-no-badge';
-  noBadge.textContent = desk.studentNo ? `#${desk.studentNo}` : `[${dIdx + 1}]`;
+  noBadge.textContent = desk.studentNo ? `#${desk.studentNo}` : `석`;
+  topBar.appendChild(noBadge);
 
-  // 줄 내 책상 순서 좌우 변경
-  const slotBtn = document.createElement('button');
-  slotBtn.className = 'desk-slot-btn';
-  slotBtn.innerHTML = '⇄';
-  slotBtn.title = '줄 내에서 책상 순서 좌우 변경';
-  slotBtn.onclick = (e) => {
-    e.stopPropagation();
-    if (row.desks.length > 1) {
-      const nextIdx = (dIdx + 1) % row.desks.length;
-      const temp = row.desks[dIdx];
-      row.desks[dIdx] = row.desks[nextIdx];
-      row.desks[nextIdx] = temp;
+  // [조절 모드 전용] 책상 삭제(✕) 버튼
+  if (appState.isEditMode) {
+    const delBtn = document.createElement('button');
+    delBtn.className = 'desk-del-btn edit-only';
+    delBtn.innerHTML = '✕';
+    delBtn.title = '이 책상 삭제 (공간 확보)';
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      row.desks = row.desks.filter((d) => d.id !== desk.id);
       saveState();
       renderCanvas();
-    }
-  };
+    };
+    topBar.appendChild(delBtn);
+  }
 
-  topBar.appendChild(noBadge);
-  topBar.appendChild(slotBtn);
   card.appendChild(topBar);
 
+  // 학생 이름 라벨
   const nameLabel = document.createElement('div');
   nameLabel.className = `desk-name ${hasStudent ? '' : 'empty'}`;
   nameLabel.textContent = hasStudent ? desk.studentName : '빈자리';
   card.appendChild(nameLabel);
 
+  // [조절 모드 전용] 책상 하단 '반 칸(0.5칸) 이동' 버튼 바
+  if (appState.isEditMode) {
+    const shiftBar = document.createElement('div');
+    shiftBar.className = 'desk-shift-bar edit-only';
+
+    const btnLeft = document.createElement('button');
+    btnLeft.className = 'shift-btn';
+    btnLeft.innerHTML = '◀ 0.5';
+    btnLeft.title = '왼쪽으로 반 칸(0.5칸) 이동';
+    btnLeft.onclick = (e) => {
+      e.stopPropagation();
+      shiftDeskPosition(row, desk, -0.5, maxDesks);
+    };
+
+    const btnRight = document.createElement('button');
+    btnRight.className = 'shift-btn';
+    btnRight.innerHTML = '0.5 ▶';
+    btnRight.title = '오른쪽으로 반 칸(0.5칸) 이동';
+    btnRight.onclick = (e) => {
+      e.stopPropagation();
+      shiftDeskPosition(row, desk, 0.5, maxDesks);
+    };
+
+    shiftBar.appendChild(btnLeft);
+    shiftBar.appendChild(btnRight);
+    card.appendChild(shiftBar);
+  }
+
+  // 더블 클릭 시 학생 지정 모달 (운영 모드일 때)
   card.addEventListener('dblclick', (e) => {
     e.stopPropagation();
     openDeskEditModal(desk);
   });
 
-  // 드래그앤드롭 이벤트
+  // 드래그앤드롭 이벤트 (운영 모드일 때 자리 스왑 및 명렬표 배정)
   card.addEventListener('dragstart', (e) => {
+    if (appState.isEditMode) return;
     e.dataTransfer.setData('text/plain', JSON.stringify({
       type: 'DESK_SWAP',
       sourceDeskId: desk.id
@@ -467,10 +472,11 @@ function createDeskCardElement(zone, row, desk, dIdx) {
 
   card.addEventListener('dragend', () => {
     card.style.opacity = '1';
-    document.querySelectorAll('.desk-card, .desk-slot-empty').forEach((el) => el.classList.remove('drag-over'));
+    document.querySelectorAll('.desk-card').forEach((el) => el.classList.remove('drag-over'));
   });
 
   card.addEventListener('dragover', (e) => {
+    if (appState.isEditMode) return;
     e.preventDefault();
     card.classList.add('drag-over');
   });
@@ -480,6 +486,7 @@ function createDeskCardElement(zone, row, desk, dIdx) {
   });
 
   card.addEventListener('drop', (e) => {
+    if (appState.isEditMode) return;
     e.preventDefault();
     card.classList.remove('drag-over');
     const raw = e.dataTransfer.getData('text/plain');
@@ -498,7 +505,7 @@ function createDeskCardElement(zone, row, desk, dIdx) {
   return card;
 }
 
-// (3) 출석 명렬표 서랍 렌더링
+// (3) 출석 명렬표 서랍 렌더링 (기본 배치됨)
 function renderRoster() {
   const tab = getActiveTab();
   if (!tab) return;
@@ -513,7 +520,7 @@ function renderRoster() {
   container.innerHTML = '';
 
   tab.roster.forEach((student) => {
-    const isAssigned = isStudentAssigned(student.name, student.no);
+    const isAssigned = isStudentAssigned(student.name);
 
     const item = document.createElement('div');
     item.className = `roster-student-item ${isAssigned ? 'assigned' : ''}`;
@@ -577,7 +584,7 @@ function updateRosterStats() {
 
   let assignedCount = 0;
   tab.roster.forEach((s) => {
-    if (isStudentAssigned(s.name, s.no)) assignedCount++;
+    if (isStudentAssigned(s.name)) assignedCount++;
   });
 
   const unassigned = tab.roster.length - assignedCount;
@@ -610,26 +617,24 @@ function renderAll() {
   renderRoster();
 }
 
-// ===================== 4. 좌석 및 구역 조작 비즈니스 로직 =====================
+// ===================== 5. 분단 상단 스피너 제어 =====================
 
 function changeZoneRowCount(zone, delta) {
   const next = Math.max(1, Math.min(12, zone.rowCount + delta));
   if (next === zone.rowCount) return;
 
   if (delta > 0) {
-    const defaultDeskCount = zone.rows[0]?.desks?.length || 2;
+    const maxDesks = zone.maxDesks || 2;
     for (let i = zone.rowCount; i < next; i++) {
-      const newRow = {
+      zone.rows.push({
         id: `row_${zone.id}_${i}_${Date.now()}`,
-        deskCount: defaultDeskCount,
-        align: 'left',
-        desks: Array.from({ length: defaultDeskCount }).map((_, di) => ({
+        desks: Array.from({ length: maxDesks }).map((_, di) => ({
           id: `desk_${zone.id}_${i}_${di}_${Date.now()}`,
+          pos: di * 1.0,
           studentNo: '',
           studentName: ''
         }))
-      };
-      zone.rows.push(newRow);
+      });
     }
   } else {
     zone.rows = zone.rows.slice(0, next);
@@ -640,50 +645,18 @@ function changeZoneRowCount(zone, delta) {
   renderCanvas();
 }
 
-function changeRowDeskCount(zone, row, delta) {
-  const next = Math.max(1, Math.min(6, row.desks.length + delta));
-  if (next === row.desks.length) return;
+function changeZoneMaxDesks(zone, delta) {
+  const next = Math.max(1, Math.min(5, (zone.maxDesks || 2) + delta));
+  if (next === zone.maxDesks) return;
 
-  if (delta > 0) {
-    for (let i = row.desks.length; i < next; i++) {
-      row.desks.push({
-        id: `desk_${row.id}_${i}_${Date.now()}`,
-        studentNo: '',
-        studentName: ''
-      });
-    }
-  } else {
-    row.desks = row.desks.slice(0, next);
-  }
+  zone.maxDesks = next;
+  // 기존 책상들이 새로운 최대 폭을 넘어가면 보정
+  zone.rows.forEach((r) => {
+    r.desks = r.desks.filter((d) => d.pos + 1.0 <= next);
+  });
 
-  row.deskCount = row.desks.length;
   saveState();
   renderCanvas();
-}
-
-// 책상을 특정 줄(row)로 이동 (빈 칸으로 이동)
-function moveDeskToRow(sourceDeskId, targetRow) {
-  const tab = getActiveTab();
-  let foundDesk = null;
-
-  // 원본 책상 찾아서 분리
-  for (const z of tab.zones) {
-    for (const r of z.rows) {
-      const idx = r.desks.findIndex((d) => d.id === sourceDeskId);
-      if (idx !== -1) {
-        foundDesk = r.desks.splice(idx, 1)[0];
-        r.deskCount = r.desks.length;
-        break;
-      }
-    }
-  }
-
-  if (foundDesk) {
-    targetRow.desks.push(foundDesk);
-    targetRow.deskCount = targetRow.desks.length;
-    saveState();
-    renderCanvas();
-  }
 }
 
 function assignStudentToDesk(studentId, desk) {
@@ -742,7 +715,7 @@ function clearStudentFromAllDesks(name) {
   }
 }
 
-// ===================== 5. 명렬표 총원 및 자동 번호 엔진 =====================
+// ===================== 6. 명렬표 총원 및 자동 번호 엔진 =====================
 
 function setTotalStudentCount(count) {
   const tab = getActiveTab();
@@ -778,7 +751,7 @@ function renumberRosterIfNeeded(tab) {
 
 function handleRandomShuffle() {
   const tab = getActiveTab();
-  const unassigned = tab.roster.filter((s) => !isStudentAssigned(s.name, s.no));
+  const unassigned = tab.roster.filter((s) => !isStudentAssigned(s.name));
 
   const emptyDesks = [];
   tab.zones.forEach((z) => {
@@ -830,7 +803,7 @@ function handleClearAllDesks() {
   renderRoster();
 }
 
-// ===================== 6. 초기 구조 설정 마법사 모달 =====================
+// ===================== 7. 초기 구조 설정 마법사 모달 =====================
 
 let pendingTabTitle = '';
 
@@ -846,7 +819,7 @@ function openInitSetupModal(isNewTab = false) {
 
   zInput.value = tab.zones.length || 3;
   rInput.value = tab.zones[0]?.rows?.length || 4;
-  dInput.value = tab.zones[0]?.rows[0]?.desks?.length || 2;
+  dInput.value = tab.zones[0]?.maxDesks || 2;
   tInput.value = tab.totalCount || 24;
 
   modal.classList.remove('hidden');
@@ -863,13 +836,12 @@ function applyInitSetupModal() {
   const className = currentTab.className || '1학년 2반';
 
   const newTab = createDefaultTab(title, className, zCount, rCount, dCount, tCount);
+  newTab.isEditMode = true; // 생성 직후에는 조절 모드로 바로 시작
 
-  // 새 탭 추가인지 또는 현재 탭 재구성인지 판단
   if (pendingTabTitle && pendingTabTitle !== currentTab.title) {
     appState.tabs.push(newTab);
     appState.activeTabId = newTab.id;
   } else {
-    // 현재 탭 덮어쓰기
     const idx = appState.tabs.findIndex((t) => t.id === currentTab.id);
     newTab.id = currentTab.id;
     newTab.title = currentTab.title;
@@ -877,13 +849,14 @@ function applyInitSetupModal() {
     appState.tabs[idx] = newTab;
   }
 
+  appState.isEditMode = true;
   saveState();
   document.getElementById('initSetupModal').classList.add('hidden');
   pendingTabTitle = '';
   renderAll();
 }
 
-// ===================== 7. 개별 책상 수정 모달 =====================
+// ===================== 8. 개별 책상 수정 모달 =====================
 
 let editingTargetDesk = null;
 
@@ -904,7 +877,7 @@ function closeDeskEditModal() {
   editingTargetDesk = null;
 }
 
-// ===================== 8. 이벤트 리스너 바인딩 =====================
+// ===================== 9. 이벤트 리스너 바인딩 =====================
 
 function initEventListeners() {
   // 1. 탭 추가 버튼 ➔ 초기 마법사 팝업 바로 띄움
@@ -912,9 +885,21 @@ function initEventListeners() {
     openInitSetupModal(true);
   };
 
-  // 2. 툴바 [기본구조 설정] 버튼 ➔ 초기 마법사 팝업 다시 띄움
-  document.getElementById('btnReconfigLayout').onclick = () => {
-    openInitSetupModal(false);
+  // 2. [좌석 조절 모드] 토글 버튼 & [좌석위치 마감] 버튼
+  const btnToggleEdit = document.getElementById('btnToggleEditMode');
+  const btnFinish = document.getElementById('btnFinishLayout');
+
+  const toggleEditMode = () => {
+    appState.isEditMode = !appState.isEditMode;
+    saveState();
+    renderCanvas();
+  };
+
+  btnToggleEdit.onclick = toggleEditMode;
+  btnFinish.onclick = () => {
+    appState.isEditMode = false;
+    saveState();
+    renderCanvas();
   };
 
   // 마법사 모달 버튼
@@ -931,18 +916,18 @@ function initEventListeners() {
     const tab = getActiveTab();
     const nextIdx = tab.zones.length + 1;
     const defaultRowCount = tab.zones[0]?.rows?.length || 4;
-    const defaultDeskCount = tab.zones[0]?.rows[0]?.desks?.length || 2;
+    const defaultMaxDesks = tab.zones[0]?.maxDesks || 2;
 
     const newZone = {
       id: `zone_${Date.now()}`,
       name: `${nextIdx}분단`,
       rowCount: defaultRowCount,
+      maxDesks: defaultMaxDesks,
       rows: Array.from({ length: defaultRowCount }).map((_, rIdx) => ({
         id: `row_${Date.now()}_${rIdx}`,
-        deskCount: defaultDeskCount,
-        align: 'left',
-        desks: Array.from({ length: defaultDeskCount }).map((_, di) => ({
+        desks: Array.from({ length: defaultMaxDesks }).map((_, di) => ({
           id: `desk_${Date.now()}_${rIdx}_${di}`,
+          pos: di * 1.0,
           studentNo: '',
           studentName: ''
         }))
@@ -964,7 +949,7 @@ function initEventListeners() {
     }
   };
 
-  // 5. 명렬표 서랍 토글
+  // 5. 명렬표 서랍 토글 (기본 열림)
   const rosterSidebar = document.getElementById('rosterSidebar');
   const toggleBtn = document.getElementById('btnToggleRoster');
   const toggleRoster = () => {
@@ -1056,11 +1041,35 @@ function initEventListeners() {
   // 10. 상단 툴바 액션
   document.getElementById('btnRandomAssign').onclick = handleRandomShuffle;
   document.getElementById('btnClearDesks').onclick = () => {
-    if (confirm('모든 책상의 배정을 비우시겠습니까?')) handleClearAllDesks();
+    if (confirm('모든 자리를 비우고 기본 구조를 다시 설정하시겠습니까?')) {
+      handleClearAllDesks();
+      openInitSetupModal(false);
+    }
   };
-  document.getElementById('btnPrint').onclick = () => window.print();
 
-  // 11. 개별 책상 수정 모달 이벤트
+  // 11. A4 인쇄 모달 (명렬표 포함 여부 선택)
+  const printModal = document.getElementById('printOptionModal');
+  document.getElementById('btnPrintModalOpen').onclick = () => {
+    printModal.classList.remove('hidden');
+  };
+  document.getElementById('btnClosePrintModal').onclick = () => {
+    printModal.classList.add('hidden');
+  };
+  document.getElementById('btnCancelPrintModal').onclick = () => {
+    printModal.classList.add('hidden');
+  };
+  document.getElementById('btnExecutePrint').onclick = () => {
+    const withRoster = document.getElementById('chkPrintWithRoster').checked;
+    if (withRoster) {
+      document.body.classList.remove('print-hide-roster');
+    } else {
+      document.body.classList.add('print-hide-roster');
+    }
+    printModal.classList.add('hidden');
+    window.print();
+  };
+
+  // 12. 개별 책상 수정 모달 이벤트
   document.getElementById('btnCloseDeskModal').onclick = closeDeskEditModal;
   document.getElementById('btnClearDeskItem').onclick = () => {
     if (editingTargetDesk) {
@@ -1089,6 +1098,8 @@ window.addEventListener('DOMContentLoaded', () => {
   initEventListeners();
   if (!appState.rosterOpen) {
     document.getElementById('rosterSidebar').classList.add('collapsed');
+  } else {
+    document.getElementById('rosterSidebar').classList.remove('collapsed');
   }
   renderAll();
 });
