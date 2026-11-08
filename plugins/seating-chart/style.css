@@ -16,7 +16,7 @@
   --desk-wood-hover: #333f52;
   --desk-assigned: #1e3a5f;
   --desk-border: #4b5563;
-  --aisle-color: rgba(56, 189, 248, 0.25);
+  --slot-empty-border: #334155;
 }
 
 *, *::before, *::after {
@@ -159,12 +159,6 @@ body {
   border-color: #475569;
 }
 
-.tool-btn.active-mode {
-  background-color: rgba(56, 189, 248, 0.2);
-  border-color: #38bdf8;
-  color: #38bdf8;
-}
-
 .tool-btn.highlight {
   background-color: #0284c7;
   border-color: #0284c7;
@@ -233,7 +227,7 @@ body {
   border-bottom: 1px dashed #1f2937;
 }
 
-/* 분단 및 구역 컨테이너 (오토 레이아웃) */
+/* 분단 컨테이너 (오토 레이아웃) */
 #zonesContainer {
   flex: 1;
   display: flex;
@@ -245,22 +239,16 @@ body {
   position: relative;
 }
 
-/* 개별 분단 (Zone) */
+/* 개별 분단 (Zone) - 너비는 해당 분단의 최대 책상 개수에 따라 자동 결정 */
 .zone-column {
   display: flex;
   flex-direction: column;
-  background-color: rgba(17, 24, 39, 0.6);
+  background-color: rgba(17, 24, 39, 0.7);
   border: 1px solid #1f2937;
   border-radius: 12px;
   padding: 12px;
   gap: 12px;
   transition: all 0.2s ease;
-  min-width: 140px;
-}
-
-.zone-column.selected {
-  border-color: #10b981;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35);
 }
 
 .zone-header {
@@ -302,11 +290,6 @@ body {
   transition: all 0.15s ease;
 }
 
-.zone-row.selected {
-  border-color: #10b981;
-  background-color: rgba(16, 185, 129, 0.1);
-}
-
 .row-stepper {
   display: flex;
   align-items: center;
@@ -315,6 +298,7 @@ body {
   border: 1px solid #334155;
   border-radius: 6px;
   padding: 2px 4px;
+  flex-shrink: 0;
 }
 
 .row-stepper button {
@@ -336,12 +320,51 @@ body {
   text-align: center;
 }
 
-/* 책상 컨테이너 */
+/* 위치 조정 선택기 (좌측 / 두 책상의 중간 / 우측 / 양끝) */
+.row-align-pill {
+  display: flex;
+  background-color: #0b0f19;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  padding: 1px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.row-align-btn {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.row-align-btn:hover { color: #f1f5f9; }
+.row-align-btn.active {
+  background-color: #0284c7;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* 책상 래퍼 (정렬 모드에 따라 flex 배치 지원) */
 .desks-wrap {
   display: flex;
   align-items: center;
   gap: 10px;
   flex: 1;
+  justify-content: flex-start;
+  min-height: 60px;
+}
+
+.desks-wrap.align-center {
+  justify-content: center; /* 두 책상의 중간(정중앙)에 배치 */
+}
+.desks-wrap.align-right {
+  justify-content: flex-end; /* 우측 정렬 */
+}
+.desks-wrap.align-split {
+  justify-content: space-between; /* 양 끝 배치 (가운데 빈 공간) */
 }
 
 /* 개별 학생 책상 (Desk Card) */
@@ -359,6 +382,7 @@ body {
   position: relative;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
   transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
 }
 
 .desk-card:hover {
@@ -372,7 +396,7 @@ body {
   border-color: #3b82f6;
 }
 
-.desk-card.drag-over {
+.desk-card.drag-over, .desk-slot-empty.drag-over {
   border: 2px dashed #38bdf8 !important;
   background-color: rgba(56, 189, 248, 0.25) !important;
 }
@@ -415,6 +439,28 @@ body {
   color: #475569;
   font-size: 11px;
   font-weight: 500;
+}
+
+/* 비어있는 칸 (Empty Slot - 책상을 이 빈 칸으로 드래그하여 옮길 수 있음) */
+.desk-slot-empty {
+  width: 90px;
+  height: 60px;
+  border: 1px dashed var(--slot-empty-border);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4b5563;
+  font-size: 11px;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.desk-slot-empty:hover {
+  border-color: #38bdf8;
+  color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.08);
 }
 
 /* ================= 하단 기준점: [교탁 / 전면 칠판] ================= */
@@ -476,73 +522,7 @@ body {
   opacity: 0.7;
 }
 
-/* ================= 4. 플로팅 다중선택 일괄 변경 바 ================= */
-#batchControlBar {
-  position: fixed;
-  bottom: 95px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: #0f172a;
-  border: 1px solid #10b981;
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
-  border-radius: 10px;
-  padding: 10px 18px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  z-index: 100;
-  animation: slideUp 0.2s ease;
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translate(-50%, 15px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
-}
-
-.batch-info {
-  font-size: 12px;
-  font-weight: 700;
-  color: #10b981;
-}
-
-.batch-controls {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.stepper-unit {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.stepper-unit .label {
-  font-size: 11px;
-  color: #cbd5e1;
-}
-
-.stepper-unit .val {
-  font-size: 13px;
-  font-weight: 800;
-  color: #38bdf8;
-  min-width: 16px;
-  text-align: center;
-}
-
-.step-btn {
-  width: 24px;
-  height: 24px;
-  background-color: #1e293b;
-  border: 1px solid #334155;
-  color: #f1f5f9;
-  border-radius: 5px;
-  cursor: pointer;
-  font-weight: bold;
-}
-.step-btn:hover { background-color: #334155; }
-
-/* ================= 5. 수업용 출석 명렬표 서랍 (Roster) ================= */
+/* ================= 4. 수업용 출석 명렬표 서랍 (Roster) ================= */
 #rosterSidebar {
   width: 280px;
   background-color: #0d1322;
@@ -768,7 +748,7 @@ body {
   cursor: pointer;
 }
 
-/* ================= 6. 모달 스타일 ================= */
+/* ================= 5. 모달 스타일 ================= */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -780,7 +760,7 @@ body {
   z-index: 1000;
 }
 
-.modal-overlay.hidden, #batchControlBar.hidden {
+.modal-overlay.hidden {
   display: none !important;
 }
 
@@ -811,17 +791,14 @@ body {
   line-height: 1.5;
 }
 
-textarea {
-  width: 100%;
-  background-color: #020617;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  padding: 10px;
-  color: #38bdf8;
-  font-family: monospace;
-  font-size: 12px;
-  outline: none;
-  resize: vertical;
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  background: #111827;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #1f2937;
 }
 
 .form-row {
@@ -834,10 +811,39 @@ textarea {
   background-color: #020617;
   border: 1px solid #334155;
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 7px 10px;
   color: #f1f5f9;
   font-size: 13px;
   outline: none;
+}
+
+.modal-number-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.modal-number-stepper input {
+  width: 60px;
+  text-align: center;
+  font-weight: 700;
+  color: #38bdf8;
+}
+.modal-number-stepper .unit {
+  font-size: 11px;
+  color: #64748b;
+}
+
+textarea {
+  width: 100%;
+  background-color: #020617;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 10px;
+  color: #38bdf8;
+  font-family: monospace;
+  font-size: 12px;
+  outline: none;
+  resize: vertical;
 }
 
 .modal-footer {
@@ -877,7 +883,7 @@ textarea {
   cursor: pointer;
 }
 
-/* ================= 7. A4 인쇄 스타일 (@media print) ================= */
+/* ================= 6. A4 인쇄 스타일 (@media print) ================= */
 @media print {
   body {
     background: #ffffff !important;
@@ -885,7 +891,7 @@ textarea {
     height: auto !important;
     overflow: visible !important;
   }
-  #tabHeader, #mainToolbar, #rosterSidebar, #batchControlBar, .desk-edit-hint, .row-stepper, .zone-del-btn {
+  #tabHeader, #mainToolbar, #rosterSidebar, .desk-edit-hint, .row-stepper, .zone-del-btn, .row-align-pill, .desk-slot-empty {
     display: none !important;
   }
   #classroomCanvas {
