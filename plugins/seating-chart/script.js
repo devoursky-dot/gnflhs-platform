@@ -426,7 +426,7 @@ function createDeskCardElement(zone, row, desk, maxDesks) {
   nameLabel.textContent = hasStudent ? desk.studentName : '빈자리';
   card.appendChild(nameLabel);
 
-  // [인쇄 전용 뷰 컨테이너] 사용자 선택 4종 포맷(이름(번호), 번호 이름, 위-번호 아래-이름, 위-이름 아래-번호) 대응
+  // [인쇄 전용 뷰 컨테이너] 사용자 선택 4종 포맷 대응 (이름 강조 & 2줄 시 번호는 이름의 절반 크기)
   const printView = document.createElement('div');
   printView.className = 'desk-print-view';
 
@@ -436,25 +436,37 @@ function createDeskCardElement(zone, row, desk, maxDesks) {
   // 1. 이름(번호) - 예: 김민준(1)
   const pBracket = document.createElement('div');
   pBracket.className = 'dp-item dp-format-bracket';
-  pBracket.textContent = hasStudent ? (pNum ? `${pName}(${pNum})` : pName) : '';
+  if (hasStudent) {
+    pBracket.innerHTML = pNum
+      ? `<span class="dp-main">${pName}</span><span class="dp-sub">(${pNum})</span>`
+      : `<span class="dp-main">${pName}</span>`;
+  }
 
   // 2. 번호 이름 - 예: 1 김민준
   const pNumName = document.createElement('div');
   pNumName.className = 'dp-item dp-format-num-name';
-  pNumName.textContent = hasStudent ? (pNum ? `${pNum} ${pName}` : pName) : '';
+  if (hasStudent) {
+    pNumName.innerHTML = pNum
+      ? `<span class="dp-sub">${pNum}</span> <span class="dp-main">${pName}</span>`
+      : `<span class="dp-main">${pName}</span>`;
+  }
 
-  // 3. 위-번호 아래-이름
+  // 3. 위-번호 아래-이름 (두 줄: 번호는 이름의 절반 크기)
   const pTopNumBotName = document.createElement('div');
   pTopNumBotName.className = 'dp-item dp-format-top-num-bot-name';
   if (hasStudent) {
-    pTopNumBotName.innerHTML = `<span class="dp-sub">${pNum}</span><span class="dp-main">${pName}</span>`;
+    pTopNumBotName.innerHTML = pNum
+      ? `<span class="dp-sub">${pNum}</span><span class="dp-main">${pName}</span>`
+      : `<span class="dp-main">${pName}</span>`;
   }
 
-  // 4. 위-이름 아래-번호
+  // 4. 위-이름 아래-번호 (두 줄: 번호는 이름의 절반 크기)
   const pTopNameBotNum = document.createElement('div');
   pTopNameBotNum.className = 'dp-item dp-format-top-name-bot-num';
   if (hasStudent) {
-    pTopNameBotNum.innerHTML = `<span class="dp-main">${pName}</span><span class="dp-sub">${pNum}</span>`;
+    pTopNameBotNum.innerHTML = pNum
+      ? `<span class="dp-main">${pName}</span><span class="dp-sub">${pNum}</span>`
+      : `<span class="dp-main">${pName}</span>`;
   }
 
   printView.appendChild(pBracket);
@@ -1104,12 +1116,12 @@ function initEventListeners() {
     // 1. 선택된 학생 표기 양식 data 속성 바인딩
     document.body.dataset.printFormat = selectedFormat;
 
-    // 2. 명렬표 포함 여부 및 높이 100% 균등 분배 행 계산
+    // 2. 명렬표 포함 여부 및 우측 1열 전체 행 높이 100% 균등 분배 행 계산
     if (withRoster && tab && tab.roster && tab.roster.length > 0) {
       document.body.classList.remove('print-hide-roster');
-      const half = Math.max(1, Math.ceil(tab.roster.length / 2));
-      rosterListContainer.style.setProperty('--print-roster-rows', String(half));
-      rosterListContainer.style.gridTemplateRows = `repeat(${half}, 1fr)`;
+      const totalStudents = Math.max(1, tab.roster.length);
+      rosterListContainer.style.setProperty('--print-roster-rows', String(totalStudents));
+      rosterListContainer.style.gridTemplateRows = `repeat(${totalStudents}, 1fr)`;
     } else {
       document.body.classList.add('print-hide-roster');
       rosterListContainer.style.gridTemplateRows = '';
