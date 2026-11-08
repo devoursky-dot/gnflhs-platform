@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
 import { isSuperAdmin } from '@gnflhs/shared-auth';
 import { DeviceViewportType, StudioProject } from '@gnflhs/shared-types';
+import { ENV } from '../config/env';
 import {
   attachRuntimeRpcBridge,
   clearProjectCache,
@@ -97,16 +98,17 @@ export const TestDeploymentRunner: React.FC<TestDeploymentRunnerProps> = ({
       : null
   });
 
+  const { tablet: tb, mobile: mb } = ENV.VIEWPORTS;
   const frameDims =
     device === 'pc'
       ? { width: '100%', height: '100%', label: 'PC 100%' }
       : device === 'tablet'
       ? landscape
-        ? { width: '1024px', height: '768px', label: '1024×768' }
-        : { width: '768px', height: '1024px', label: '768×1024' }
+        ? { width: `${tb.height}px`, height: `${tb.width}px`, label: `${tb.height}×${tb.width}` }
+        : { width: `${tb.width}px`, height: `${tb.height}px`, label: `${tb.width}×${tb.height}` }
       : landscape
-      ? { width: '844px', height: '390px', label: '844×390' }
-      : { width: '390px', height: '844px', label: '390×844' };
+      ? { width: `${mb.height}px`, height: `${mb.width}px`, label: `${mb.height}×${mb.width}` }
+      : { width: `${mb.width}px`, height: `${mb.height}px`, label: `${mb.width}×${mb.height}` };
 
   return (
     <div style={{
@@ -292,7 +294,7 @@ export const TestDeploymentRunner: React.FC<TestDeploymentRunnerProps> = ({
             key={`${runKey}-${device}-${landscape}`}
             srcDoc={compiledSrc}
             title={project.name}
-            sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-downloads allow-popups"
+            sandbox={ENV.IFRAME_SANDBOX_FLAGS}
             style={{
               width: '100%',
               height: '100%',

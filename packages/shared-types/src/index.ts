@@ -1,4 +1,5 @@
-// GNFLHS 공통 타입 정의 (모듈 간 데이터 규격 통일)
+// GNFLHS 공통 타입 정의 및 통합 환경변수 모듈 수출
+export * from './platformEnv';
 
 export type UserRole = 'super_admin' | 'admin' | 'teacher' | 'student';
 

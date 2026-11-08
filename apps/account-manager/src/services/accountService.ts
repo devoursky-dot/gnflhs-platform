@@ -1,8 +1,8 @@
 import { collection, doc, getDocs, writeBatch, setDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '@gnflhs/shared-auth';
-import { UserAccount, UserRole } from '@gnflhs/shared-types';
+import { FIRESTORE_COLLECTIONS, PLATFORM_ENV, UserAccount, UserRole } from '@gnflhs/shared-types';
 
-const USERS_COLLECTION = 'users';
+const USERS_COLLECTION = FIRESTORE_COLLECTIONS.USERS;
 
 export async function fetchAllUsers(): Promise<UserAccount[]> {
   try {
@@ -87,7 +87,7 @@ export function parseGoogleSheetText(rawText: string): { parsed: UserAccount[]; 
     const rawRole = cleanCols[0].toLowerCase();
     const id = cleanCols[1];
     const name = cleanCols[2];
-    const email = cleanCols[3] || `${id}@gnflhs.hs.kr`;
+    const email = cleanCols[3] || `${id}@${PLATFORM_ENV.SCHOOL_EMAIL_DOMAIN}`;
     const groupName = cleanCols[4] || (rawRole.includes('교사') ? '교직원' : '학생');
     const dormitoryRoom = cleanCols[5] || '';
 

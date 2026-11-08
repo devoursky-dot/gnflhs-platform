@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { listStoragePath, uploadFileToStorage, deleteFileFromStorage, StorageFileItem } from '../services/storageService';
+import { STORAGE_ROOT_FOLDERS } from '../config/env';
 import { HardDrive, Folder, File, Image, FileText, Upload, Trash2, Download, RefreshCw, X, ChevronRight, FolderPlus } from 'lucide-react';
 
 interface StorageExplorerModalProps {
@@ -7,13 +8,7 @@ interface StorageExplorerModalProps {
   onClose: () => void;
 }
 
-const ROOT_FOLDERS = [
-  { id: 'shared', label: '공용 자료', path: 'shared' },
-  { id: 'whiteboard', label: '칠판 판서', path: 'plugins/whiteboard' },
-  { id: 'dormitory', label: '기숙사 증빙', path: 'dormitory-evidence' },
-  { id: 'teachers', label: '교직원함', path: 'teachers' },
-  { id: 'system', label: '시스템', path: 'system' }
-];
+const ROOT_FOLDERS = STORAGE_ROOT_FOLDERS;
 
 export const StorageExplorerModal: React.FC<StorageExplorerModalProps> = ({ isOpen, onClose }) => {
   const [currentPath, setCurrentPath] = useState<string>('shared');

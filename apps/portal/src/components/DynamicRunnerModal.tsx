@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 import { isSuperAdmin } from '@gnflhs/shared-auth';
 import { AppPlugin, DeviceViewportType } from '@gnflhs/shared-types';
+import { ENV } from '../config/env';
 import { attachRuntimeRpcBridge } from '../services/studioService';
 import { compileStudioBundle } from '../services/studioCompiler';
 import { ArrowLeft, Monitor, Tablet, Smartphone, RefreshCw } from 'lucide-react';
@@ -151,9 +152,9 @@ export const DynamicRunnerModal: React.FC<DynamicRunnerModalProps> = ({
         <div style={{
           width:
             deviceOverride === 'tablet'
-              ? '768px'
+              ? `${ENV.VIEWPORTS.tablet.width}px`
               : deviceOverride === 'mobile'
-              ? '390px'
+              ? `${ENV.VIEWPORTS.mobile.width}px`
               : '100%',
           height:
             deviceOverride === 'tablet' || deviceOverride === 'mobile'
@@ -169,7 +170,7 @@ export const DynamicRunnerModal: React.FC<DynamicRunnerModalProps> = ({
             key={`${reloadKey}-${deviceOverride}`}
             srcDoc={runtimeSrcDoc}
             title={plugin.name}
-            sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-downloads allow-popups"
+            sandbox={ENV.IFRAME_SANDBOX_FLAGS}
             style={{
               width: '100%',
               height: '100%',

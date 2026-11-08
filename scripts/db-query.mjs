@@ -3,7 +3,6 @@ import {
   getFirestore,
   doc,
   setDoc,
-  getDoc,
   getDocs,
   deleteDoc,
   collection,
@@ -11,17 +10,9 @@ import {
   limit as firestoreLimit,
   where as firestoreWhere
 } from 'firebase/firestore';
+import { CLI_FIREBASE_CONFIG, CLI_COLLECTIONS } from './load-env.mjs';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDxEM9YQx18vLISdcWOoGrOhTc6nUCXJKI",
-  authDomain: "gnflhs.firebaseapp.com",
-  projectId: "gnflhs",
-  storageBucket: "gnflhs.firebasestorage.app",
-  messagingSenderId: "738264910794",
-  appId: "1:738264910794:web:67cb40366fd32943e6dd33"
-};
-
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const app = getApps().length === 0 ? initializeApp(CLI_FIREBASE_CONFIG) : getApp();
 const db = getFirestore(app);
 
 const [,, cmdArg, extraArg] = process.argv;
@@ -47,8 +38,7 @@ async function runCli() {
 
   if (trimmed === 'list') {
     console.log('\n=== FIRESTORE COLLECTIONS ===');
-    const known = ['plugins', 'studio_projects', 'users', 'dormitory_records', 'whiteboard_sessions', 'study_rooms', 'platform_settings', 'storage_meta'];
-    for (const c of known) {
+    for (const c of CLI_COLLECTIONS.KNOWN_LIST) {
       const snap = await getDocs(query(collection(db, c), firestoreLimit(1)));
       console.log(` - ${c} (hasData: ${!snap.empty})`);
     }

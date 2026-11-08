@@ -12,6 +12,7 @@ import {
   UserRole,
   VirtualFile
 } from '@gnflhs/shared-types';
+import { ENV } from '../config/env';
 import {
   activateDeploymentSnapshot,
   publishStudioProjectAsNewApp,
@@ -2151,21 +2152,21 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
                       <iframe
                         key={`${currentScopeId}-${previewDevice}-${previewReloadKey}`}
                         title="Live Studio Preview"
-                        sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-downloads allow-popups"
+                        sandbox={ENV.IFRAME_SANDBOX_FLAGS}
                         srcDoc={livePreviewSrcDoc}
                         style={{
                           width:
                             previewDevice === 'pc'
                               ? '100%'
                               : previewDevice === 'tablet'
-                              ? '768px'
-                              : '390px',
+                              ? `${ENV.VIEWPORTS.tablet.width}px`
+                              : `${ENV.VIEWPORTS.mobile.width}px`,
                           height:
                             previewDevice === 'pc'
                               ? '100%'
                               : previewDevice === 'tablet'
                               ? '92%'
-                              : '844px',
+                              : `${ENV.VIEWPORTS.mobile.height}px`,
                           maxWidth: '100%',
                           maxHeight: '100%',
                           border: previewDevice === 'pc' ? 'none' : '1px solid #334155',

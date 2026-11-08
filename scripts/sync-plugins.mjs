@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getFirestore,
@@ -11,29 +10,21 @@ import {
   deleteDoc,
   collection
 } from 'firebase/firestore';
+import {
+  PLUGINS_DIR as pluginsDir,
+  CLI_FIREBASE_CONFIG,
+  CLI_ENV,
+  CLI_COLLECTIONS
+} from './load-env.mjs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, '..');
-const pluginsDir = path.join(rootDir, 'plugins');
-
-const firebaseConfig = {
-  apiKey: 'AIzaSyDxEM9YQx18vLISdcWOoGrOhTc6nUCXJKI',
-  authDomain: 'gnflhs.firebaseapp.com',
-  projectId: 'gnflhs',
-  storageBucket: 'gnflhs.firebasestorage.app',
-  messagingSenderId: '738264910794',
-  appId: '1:738264910794:web:67cb40366fd32943e6dd33'
-};
-
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const app = getApps().length === 0 ? initializeApp(CLI_FIREBASE_CONFIG) : getApp();
 const db = getFirestore(app);
 
-// 최고관리자 전용 시스템 콘솔은 일반 배포 카탈로그(plugins) 등록을 원천 차단
-const RESERVED_SYSTEM_IDS = ['account-manager'];
+// 최고관리자 전용 시스템 콘솔은 일반 배포 카탈로그(plugins) 등록을 원천 차단 (루트 .env 연동)
+const RESERVED_SYSTEM_IDS = CLI_ENV.RESERVED_SYSTEM_IDS;
 
 const DEFAULT_SCRIPT_PROPERTIES = {
-  SCHOOL_NAME: '경남외국어고등학교',
+  SCHOOL_NAME: CLI_ENV.SCHOOL_NAME,
   UI_PC_COLS: '3',
   UI_TABLET_COLS: '2',
   UI_MOBILE_COLS: '1',
@@ -62,10 +53,10 @@ const DEFAULT_SERVICES = [
 
 const DEFAULT_RUNTIME_CONFIG = {
   runtimeVersion: 'V8',
-  timeZone: 'Asia/Seoul',
+  timeZone: CLI_ENV.TIMEZONE,
   showManifest: true,
   cacheEnabled: true,
-  cacheTtlSec: 300
+  cacheTtlSec: CLI_ENV.DEFAULT_CACHE_TTL_SEC
 };
 
 const OFFICIAL_PLUGIN_META = {
@@ -75,11 +66,11 @@ const OFFICIAL_PLUGIN_META = {
     description: '2023년식 구형 전자칠판 최적화 & 삼성노트 REA 필압/손떨림 보정 벡터 판서앱',
     icon: 'PenTool',
     category: 'classroom',
-    version: '1.1.0',
+    version: '1.2.0',
     entryUrl: '/plugin/whiteboard',
     allowedRoles: ['super_admin', 'admin', 'teacher', 'student'],
     studioProjectId: 'proj-whiteboard',
-    note: 'V2 ES Module(@gnflhs/canvas) + env.json 정식 배포본 (v1.1.0)'
+    note: 'V2 멀티모듈(config/canvasRenderer) + env.json 안전 클램핑 정식 배포본 (v1.2.0)'
   },
   'dormitory-penalty': {
     id: 'dormitory-penalty',
@@ -87,11 +78,11 @@ const OFFICIAL_PLUGIN_META = {
     description: '학생 기숙사 호실별 상점 및 벌점 부여, 통계 조회 독립 모듈',
     icon: 'ShieldAlert',
     category: 'management',
-    version: '1.1.0',
+    version: '1.2.0',
     entryUrl: '/plugin/dormitory-penalty',
     allowedRoles: ['super_admin', 'admin', 'teacher'],
     studioProjectId: 'proj-dormitory-penalty',
-    note: 'V2 멀티파일 ES Module(./seed.js) + env.json 정식 배포본 (v1.1.0)'
+    note: 'V2 멀티모듈(config/seed/recordStore) + env.json 통합 관리 정식 배포본 (v1.2.0)'
   },
   'seating-chart': {
     id: 'seating-chart',
@@ -99,11 +90,11 @@ const OFFICIAL_PLUGIN_META = {
     description: '스마트 좌석배치도 (교실/자습실 단계별 구조 설정, 반 칸 이동 및 A4 가로 1페이지 출력)',
     icon: 'LayoutGrid',
     category: 'classroom',
-    version: '1.2.0',
+    version: '1.3.0',
     entryUrl: '/plugin/seating-chart',
     allowedRoles: ['super_admin', 'admin', 'teacher', 'student'],
     studioProjectId: 'proj-seating-chart',
-    note: 'V2 시맨틱 ID 표준화(seating-chart) + env.json + A4 가로 출력 정식 배포본 (v1.2.0)'
+    note: 'V2 5단 모듈 분리(config/geometry/state/printEngine/script) + env.json 정식 배포본 (v1.3.0)'
   }
 };
 
@@ -274,7 +265,7 @@ render();
         JSON.stringify(
           {
             APP_TITLE: title,
-            SCHOOL_NAME: '경남외국어고등학교',
+            SCHOOL_NAME: CLI_ENV.SCHOOL_NAME,
             UI_PC_COLS: '3',
             UI_TABLET_COLS: '2',
             UI_MOBILE_COLS: '1'
@@ -290,7 +281,7 @@ render();
 }
 
 async function syncWorkspaceHead(pid, meta, rawFiles, now) {
-  const projRef = doc(db, 'studio_projects', meta.studioProjectId);
+  const projRef = doc(db, CLI_COLLECTIONS.STUDIO_PROJECTS, meta.studioProjectId);
   const existingSnap = await getDoc(projRef);
   const existingData = existingSnap.exists() ? existingSnap.data() : {};
 
@@ -396,7 +387,7 @@ async function handleOfficialDeploy(idFilter, customVer, customNote) {
 
     const { files, mergedProps, projectPayload } = await syncWorkspaceHead(pid, meta, rawFiles, now);
 
-    const pluginDocRef = doc(db, 'plugins', meta.id);
+    const pluginDocRef = doc(db, CLI_COLLECTIONS.PLUGINS, meta.id);
     const pluginSnap = await getDoc(pluginDocRef);
     const prevPlugin = pluginSnap.exists() ? pluginSnap.data() : {};
 
@@ -415,9 +406,11 @@ async function handleOfficialDeploy(idFilter, customVer, customNote) {
     };
 
     const prevDeployments = Array.isArray(prevPlugin.deployments) ? prevPlugin.deployments : [];
-    // 동일 버전 스냅샷 중복 방지 후 최대 15개 유지 (1초 롤백용)
     const filteredPrev = prevDeployments.filter((d) => d.version !== version);
-    const deployments = [deploymentSnapshot, ...filteredPrev].slice(0, 15);
+    const deployments = [deploymentSnapshot, ...filteredPrev].slice(
+      0,
+      CLI_ENV.MAX_DEPLOYMENT_SNAPSHOTS
+    );
 
     const pluginPayload = {
       ...prevPlugin,
@@ -452,11 +445,22 @@ async function handleMigrateClean() {
   console.log(`\n=== V2 FIRESTORE CLEANUP & DATA MIGRATION ===`);
 
   // 1. plugin_data/app-mw7m26y7/items -> plugin_data/seating-chart/items 무손실 이전
-  const legacyItemsCol = collection(db, 'plugin_data', 'app-mw7m26y7', 'items');
+  const legacyItemsCol = collection(
+    db,
+    CLI_COLLECTIONS.PLUGIN_DATA,
+    'app-mw7m26y7',
+    CLI_COLLECTIONS.PLUGIN_DATA_ITEMS
+  );
   const legacySnap = await getDocs(legacyItemsCol);
   if (!legacySnap.empty) {
     for (const d of legacySnap.docs) {
-      const targetRef = doc(db, 'plugin_data', 'seating-chart', 'items', d.id);
+      const targetRef = doc(
+        db,
+        CLI_COLLECTIONS.PLUGIN_DATA,
+        'seating-chart',
+        CLI_COLLECTIONS.PLUGIN_DATA_ITEMS,
+        d.id
+      );
       await setDoc(targetRef, d.data(), { merge: true });
       console.log(`  ✓ Migrated user data: plugin_data/app-mw7m26y7/items/${d.id} -> plugin_data/seating-chart/items/${d.id}`);
     }
@@ -465,7 +469,7 @@ async function handleMigrateClean() {
   }
 
   // 2. plugins/account-manager 제거 (최고관리자 전용 콘솔로 완전 격리)
-  const accRef = doc(db, 'plugins', 'account-manager');
+  const accRef = doc(db, CLI_COLLECTIONS.PLUGINS, 'account-manager');
   const accSnap = await getDoc(accRef);
   if (accSnap.exists()) {
     await deleteDoc(accRef);
@@ -473,23 +477,23 @@ async function handleMigrateClean() {
   }
 
   // 3. 구형 난수 ID(app-mw7m26y7 / proj-mw7m26y7) 및 중복 사본 정리
-  const oldPluginRef = doc(db, 'plugins', 'app-mw7m26y7');
+  const oldPluginRef = doc(db, CLI_COLLECTIONS.PLUGINS, 'app-mw7m26y7');
   if ((await getDoc(oldPluginRef)).exists()) {
     await deleteDoc(oldPluginRef);
     console.log(`  ✓ Removed legacy random-ID plugin: plugins/app-mw7m26y7 (replaced by plugins/seating-chart)`);
   }
 
-  const oldProjRef = doc(db, 'studio_projects', 'proj-mw7m26y7');
+  const oldProjRef = doc(db, CLI_COLLECTIONS.STUDIO_PROJECTS, 'proj-mw7m26y7');
   if ((await getDoc(oldProjRef)).exists()) {
     await deleteDoc(oldProjRef);
     console.log(`  ✓ Removed legacy random-ID workspace: studio_projects/proj-mw7m26y7 (replaced by studio_projects/proj-seating-chart)`);
   }
 
-  const studioSnap = await getDocs(collection(db, 'studio_projects'));
+  const studioSnap = await getDocs(collection(db, CLI_COLLECTIONS.STUDIO_PROJECTS));
   for (const spDoc of studioSnap.docs) {
     const sp = spDoc.data();
     if (String(sp.name || '').includes('(사본)') || RESERVED_SYSTEM_IDS.includes(sp.publishedPluginId)) {
-      await deleteDoc(doc(db, 'studio_projects', spDoc.id));
+      await deleteDoc(doc(db, CLI_COLLECTIONS.STUDIO_PROJECTS, spDoc.id));
       console.log(`  ✓ Cleaned duplicate/system workspace: studio_projects/${spDoc.id} (${sp.name})`);
     }
   }
@@ -499,7 +503,7 @@ async function handleMigrateClean() {
 
 async function handlePull(idFilter) {
   console.log(`\n=== PULL FIRESTORE LIVE -> LOCAL PLUGINS ===`);
-  const snap = await getDocs(collection(db, 'plugins'));
+  const snap = await getDocs(collection(db, CLI_COLLECTIONS.PLUGINS));
   snap.forEach((d) => {
     const data = d.data();
     const pid = data.id || d.id;
@@ -519,7 +523,7 @@ async function handleList() {
   const localDirs = getLocalPluginDirs();
   console.log(`Local V2 Plugin Directories (plugins/): ${localDirs.join(', ') || 'none'}`);
 
-  const snap = await getDocs(collection(db, 'plugins'));
+  const snap = await getDocs(collection(db, CLI_COLLECTIONS.PLUGINS));
   console.log('\n[LIVE / BETA] Deployed Apps (Firestore plugins):');
   snap.forEach((d) => {
     const p = d.data();
@@ -529,7 +533,7 @@ async function handleList() {
     );
   });
 
-  const studioSnap = await getDocs(collection(db, 'studio_projects'));
+  const studioSnap = await getDocs(collection(db, CLI_COLLECTIONS.STUDIO_PROJECTS));
   console.log('\n[HEAD] 1:1 Studio Workspaces (Firestore studio_projects):');
   studioSnap.forEach((d) => {
     const sp = d.data();

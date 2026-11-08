@@ -4,6 +4,7 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  envDir: path.resolve(__dirname, '../..'),
   resolve: {
     alias: {
       '@gnflhs/shared-types': path.resolve(__dirname, '../../packages/shared-types/src/index.ts'),

@@ -1,15 +1,20 @@
 // ============================================================================
-// GNFLHS 기숙사 상·벌점 관리 시스템 (V2 ES Module + env.json 정식 배포본 v1.1.0)
-// - @gnflhs/sdk (env, db, cache) 및 @gnflhs/ui (toast, confirmDialog) 모듈 활용
-// - ./seed.js 멀티파일 ES Module 분리 구조
+// GNFLHS 기숙사 상·벌점 관리 시스템 (V2 멀티모듈 + env.json 정식 배포본 v1.2.0)
+// - ./config.js      : env.json 환경변수 로드 및 안전 범위 검증
+// - ./seed.js        : 초기 시드 레코드 데이터 분리 모듈
+// - ./recordStore.js : Firestore/Cache 영속화 · 층별/유형별 필터링 · 통계 계산 모듈
 // ============================================================================
 
-import { env, db, cache } from '@gnflhs/sdk';
 import { toast, confirmDialog, getDevice, onDeviceChange } from '@gnflhs/ui';
-import { INITIAL_SAMPLE_RECORDS } from './seed.js';
-
-const DATA_KEY = env.str('DATA_COLLECTION_KEY', 'dormitory_records_v1');
-const DEFAULT_SUPERVISOR = env.str('DEFAULT_SUPERVISOR', '사감교사');
+import { DORM_CONFIG } from './config.js';
+import {
+  fetchDormRecords,
+  saveDormRecords,
+  filterDormRecords,
+  computeDormStats,
+  normalizeRoomLabel,
+  escapeHtml
+} from './recordStore.js';
 
 let records = [];
 let selectedFloor = 'all'; // 'all' | '2' | '3' | '4'
@@ -19,82 +24,28 @@ let searchQuery = '';
 function updateHeaderBadge() {
   const badge = document.getElementById('schoolBadge');
   if (!badge) return;
-  const school = env.str('SCHOOL_NAME', '경남외국어고등학교');
-  const subtitle = env.str('DORM_SUBTITLE', '생활관 통합 관리');
-  badge.textContent = `${school} · ${subtitle} (${getDevice().toUpperCase()})`;
+  badge.textContent = `${DORM_CONFIG.schoolName} · ${DORM_CONFIG.dormSubtitle} (${getDevice().toUpperCase()})`;
 }
 
 updateHeaderBadge();
 onDeviceChange(updateHeaderBadge);
 
-async function loadRecords() {
-  try {
-    const saved = await db.get(DATA_KEY);
-    if (saved && Array.isArray(saved) && saved.length > 0) {
-      records = saved;
-      renderDashboard();
-      return;
-    }
-    records = [...INITIAL_SAMPLE_RECORDS];
-    await db.set(DATA_KEY, records);
-  } catch (e) {
-    console.warn('Failed to load records from db, using initial records:', e);
-    records = [...INITIAL_SAMPLE_RECORDS];
-  }
-  renderDashboard();
-}
-
-async function persistRecords() {
-  try {
-    await db.set(DATA_KEY, records);
-    cache.put('dorm_record_count', String(records.length), 600);
-  } catch (e) {
-    console.warn('Persist error:', e);
-  }
-}
-
-function getFilteredRecords() {
-  return records.filter((r) => {
-    const roomStr = String(r.room || '');
-    if (selectedFloor !== 'all' && !roomStr.startsWith(selectedFloor)) {
-      return false;
-    }
-    const pts = Number(r.points || 0);
-    if (selectedType === 'merit' && pts >= 0) return false;
-    if (selectedType === 'demerit' && pts <= 0) return false;
-
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const matchName = String(r.studentName || '').toLowerCase().includes(q);
-      const matchId = String(r.studentId || '').toLowerCase().includes(q);
-      const matchRoom = roomStr.toLowerCase().includes(q);
-      const matchReason = String(r.reason || '').toLowerCase().includes(q);
-      if (!matchName && !matchId && !matchRoom && !matchReason) return false;
-    }
-    return true;
-  });
-}
-
-function escapeHtml(str) {
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+const supervisorInput = document.getElementById('inputSupervisor');
+if (supervisorInput && !supervisorInput.value) {
+  supervisorInput.value = DORM_CONFIG.defaultSupervisor;
 }
 
 function renderDashboard() {
-  const filtered = getFilteredRecords();
+  const filtered = filterDormRecords(records, {
+    floor: selectedFloor,
+    type: selectedType,
+    query: searchQuery
+  });
+  const stats = computeDormStats(filtered);
 
-  const meritRecords = filtered.filter((r) => Number(r.points) < 0);
-  const demeritRecords = filtered.filter((r) => Number(r.points) > 0);
-
-  const meritSum = meritRecords.reduce((acc, r) => acc + Math.abs(Number(r.points)), 0);
-  const demeritSum = demeritRecords.reduce((acc, r) => acc + Number(r.points), 0);
-
-  document.getElementById('statTotalCount').textContent = `${filtered.length}건`;
-  document.getElementById('statMeritSum').textContent = `${meritSum}점 (${meritRecords.length}건)`;
-  document.getElementById('statDemeritSum').textContent = `${demeritSum}점 (${demeritRecords.length}건)`;
+  document.getElementById('statTotalCount').textContent = `${stats.totalCount}건`;
+  document.getElementById('statMeritSum').textContent = `${stats.meritSum}점 (${stats.meritCount}건)`;
+  document.getElementById('statDemeritSum').textContent = `${stats.demeritSum}점 (${stats.demeritCount}건)`;
 
   const tbody = document.getElementById('recordsTableBody');
   if (filtered.length === 0) {
@@ -121,7 +72,7 @@ function renderDashboard() {
           <td class="col-room"><span class="room-pill">${escapeHtml(r.room)}</span></td>
           <td><span class="score-badge ${badgeClass}">${badgeLabel}</span></td>
           <td class="col-reason">${escapeHtml(r.reason)}</td>
-          <td class="col-supervisor" data-tier="detail">${escapeHtml(r.supervisorName || DEFAULT_SUPERVISOR)}</td>
+          <td class="col-supervisor" data-tier="detail">${escapeHtml(r.supervisorName || DORM_CONFIG.defaultSupervisor)}</td>
           <td style="text-align:right;">
             <button class="btn-delete-row" data-id="${escapeHtml(r.id)}" title="내역 삭제">삭제</button>
           </td>
@@ -135,10 +86,12 @@ function renderDashboard() {
       const targetId = btn.getAttribute('data-id');
       const target = records.find((x) => x.id === targetId);
       if (!target) return;
-      const ok = await confirmDialog(`'${target.studentName}' 학생의 상·벌점 내역을 삭제하시겠습니까?`);
+      const ok = await confirmDialog(
+        `'${target.studentName}' 학생의 상·벌점 내역을 삭제하시겠습니까?`
+      );
       if (!ok) return;
       records = records.filter((x) => x.id !== targetId);
-      await persistRecords();
+      await saveDormRecords(records);
       renderDashboard();
       toast('내역이 삭제되었습니다.');
     };
@@ -148,7 +101,9 @@ function renderDashboard() {
 document.querySelectorAll('#floorFilterGroup .filter-btn').forEach((btn) => {
   btn.onclick = () => {
     selectedFloor = btn.getAttribute('data-floor') || 'all';
-    document.querySelectorAll('#floorFilterGroup .filter-btn').forEach((b) => b.classList.remove('active'));
+    document
+      .querySelectorAll('#floorFilterGroup .filter-btn')
+      .forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     renderDashboard();
   };
@@ -157,7 +112,9 @@ document.querySelectorAll('#floorFilterGroup .filter-btn').forEach((btn) => {
 document.querySelectorAll('#typeFilterGroup .filter-btn').forEach((btn) => {
   btn.onclick = () => {
     selectedType = btn.getAttribute('data-type') || 'all';
-    document.querySelectorAll('#typeFilterGroup .filter-btn').forEach((b) => b.classList.remove('active'));
+    document
+      .querySelectorAll('#typeFilterGroup .filter-btn')
+      .forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     renderDashboard();
   };
@@ -196,13 +153,13 @@ document.getElementById('addRecordForm').addEventListener('submit', async (e) =>
   e.preventDefault();
   const studentId = document.getElementById('inputStudentId').value.trim();
   const studentName = document.getElementById('inputStudentName').value.trim();
-  const rawRoom = document.getElementById('inputRoom').value.trim();
-  const room = rawRoom.endsWith('호') ? rawRoom : `${rawRoom}호`;
+  const room = normalizeRoomLabel(document.getElementById('inputRoom').value);
   const points = Number(document.getElementById('inputPoints').value || 1);
   const reason = document.getElementById('inputReason').value.trim();
-  const supervisorName = document.getElementById('inputSupervisor').value.trim() || DEFAULT_SUPERVISOR;
+  const supervisorName =
+    document.getElementById('inputSupervisor').value.trim() || DORM_CONFIG.defaultSupervisor;
 
-  if (!studentId || !studentName || !reason) return;
+  if (!studentId || !studentName || !room || !reason) return;
 
   const newRecord = {
     id: `rec-${Date.now()}`,
@@ -217,7 +174,7 @@ document.getElementById('addRecordForm').addEventListener('submit', async (e) =>
   };
 
   records.unshift(newRecord);
-  await persistRecords();
+  await saveDormRecords(records);
   renderDashboard();
   closeModal();
 
@@ -229,4 +186,9 @@ document.getElementById('addRecordForm').addEventListener('submit', async (e) =>
   toast(`${studentName} 학생 상·벌점이 등록되었습니다.`, 'success');
 });
 
-loadRecords();
+async function bootstrapDormApp() {
+  records = await fetchDormRecords();
+  renderDashboard();
+}
+
+bootstrapDormApp();

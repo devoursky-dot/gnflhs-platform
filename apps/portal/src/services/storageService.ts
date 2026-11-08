@@ -1,6 +1,7 @@
 import { ref, listAll, uploadBytes, getDownloadURL, deleteObject, getMetadata } from 'firebase/storage';
 import { collection, doc, getDocs, setDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { storage, db } from '@gnflhs/shared-auth';
+import { FIRESTORE_COLLECTIONS } from '@gnflhs/shared-types';
 
 export interface StorageFileItem {
   name: string;
@@ -11,7 +12,7 @@ export interface StorageFileItem {
   downloadUrl?: string;
 }
 
-const FIRESTORE_STORAGE_COLLECTION = 'storage_meta';
+const FIRESTORE_STORAGE_COLLECTION = FIRESTORE_COLLECTIONS.STORAGE_META;
 
 /**
  * 특정 스토리지 폴더 경로의 파일 및 폴더 목록 조회 (Storage 우선, 미지원 시 Firestore Fallback)

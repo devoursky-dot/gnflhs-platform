@@ -2,6 +2,8 @@ import { collection, doc, getDoc, setDoc, deleteDoc, onSnapshot } from 'firebase
 import { db } from '@gnflhs/shared-auth';
 import {
   AppPlugin,
+  FIRESTORE_COLLECTIONS,
+  PLATFORM_ENV,
   PluginDeployment,
   PluginStatus,
   StudioProject,
@@ -10,12 +12,12 @@ import {
 } from '@gnflhs/shared-types';
 import { compileStudioBundle, extractEnvFromFiles, syncEnvJsonFile } from './studioCompiler';
 
-const PLUGINS_COLLECTION = 'plugins';
+const PLUGINS_COLLECTION = FIRESTORE_COLLECTIONS.PLUGINS;
 
 /**
- * 최고관리자 전용 시스템 인프라는 일반 배포용 플러그인 카탈로그와 엄격히 분리
+ * 최고관리자 전용 시스템 인프라는 일반 배포용 플러그인 카탈로그와 엄격히 분리 (중앙 환경변수 연동)
  */
-export const RESERVED_SYSTEM_IDS = ['account-manager'];
+export const RESERVED_SYSTEM_IDS: readonly string[] = PLATFORM_ENV.RESERVED_SYSTEM_IDS;
 
 /**
  * 실시간 정식/베타 배포 앱 목록 구독 (하드코딩 없음 · 최고관리자 시스템 앱 원천 배제)
@@ -235,7 +237,10 @@ export async function upgradeAppWithStudioProject(
     entryUrl: baseApp.entryUrl
   };
 
-  const nextDeployments = [newDeployment, ...history].slice(0, 30);
+  const nextDeployments = [newDeployment, ...history].slice(
+    0,
+    PLATFORM_ENV.MAX_DEPLOYMENT_SNAPSHOTS
+  );
 
   const upgraded: AppPlugin = {
     ...baseApp,

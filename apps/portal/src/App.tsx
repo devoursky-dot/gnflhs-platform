@@ -9,6 +9,7 @@ import {
   checkRedirectResult
 } from '@gnflhs/shared-auth';
 import { AppPlugin, DeviceViewportType, StudioProject } from '@gnflhs/shared-types';
+import { ENV } from './config/env';
 import { subscribePlugins, RESERVED_SYSTEM_IDS } from './services/pluginService';
 import {
   openOrEnsureAppWorkspace,
@@ -169,9 +170,9 @@ export default function App() {
             G
           </div>
           <div>
-            <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>GNFLHS 스마트 스쿨 플랫폼</h1>
+            <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>{ENV.PORTAL_TITLE}</h1>
             <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0 0' }}>
-              경남외국어고등학교 모듈형 통합 학습·생활 포털
+              {ENV.PORTAL_SUBTITLE}
             </p>
           </div>
         </div>
@@ -361,7 +362,7 @@ export default function App() {
 
             <button
               onClick={() => {
-                window.location.href = '/account/';
+                window.location.href = ENV.ACCOUNT_CONSOLE_PATH;
               }}
               title="최고관리자 전용 통합 계정관리 시스템 (일반 배포 카탈로그와 분리 보호됨)"
               style={{

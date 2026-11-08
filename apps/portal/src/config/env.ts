@@ -1,8 +1,12 @@
-// 환경변수 중앙 관리 (하드코딩 방지)
+/**
+ * 포털 환경변수 및 시스템 상수 단일 진입점
+ */
+import {
+  PLATFORM_ENV,
+  FIRESTORE_COLLECTIONS,
+  LOCAL_STORAGE_KEYS,
+  STORAGE_ROOT_FOLDERS
+} from '@gnflhs/shared-types';
 
-export const ENV = {
-  SUPER_ADMIN_EMAIL: import.meta.env.VITE_SUPER_ADMIN_EMAIL || 'devoursky@gmail.com',
-  APP_VERSION: import.meta.env.VITE_APP_VERSION || '1.0.0',
-  FIREBASE_PROJECT_ID: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'gnflhs',
-  IS_DEV: import.meta.env.DEV
-};
+export const ENV = PLATFORM_ENV;
+export { PLATFORM_ENV, FIRESTORE_COLLECTIONS, LOCAL_STORAGE_KEYS, STORAGE_ROOT_FOLDERS };

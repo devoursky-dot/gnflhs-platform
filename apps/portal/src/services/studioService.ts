@@ -7,7 +7,14 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db } from '@gnflhs/shared-auth';
-import { AppPlugin, PluginDeployment, StudioProject } from '@gnflhs/shared-types';
+import {
+  AppPlugin,
+  FIRESTORE_COLLECTIONS,
+  LOCAL_STORAGE_KEYS,
+  PLATFORM_ENV,
+  PluginDeployment,
+  StudioProject
+} from '@gnflhs/shared-types';
 import {
   DEFAULT_LIBRARIES,
   DEFAULT_RUNTIME_CONFIG,
@@ -19,14 +26,17 @@ import {
 } from './studioCompiler';
 import { listStoragePath } from './storageService';
 
-const STUDIO_COLLECTION = 'studio_projects';
-const PLATFORM_SETTINGS_COLLECTION = 'platform_settings';
-const GLOBAL_PROPS_DOC = 'global_properties';
-const LOCAL_PROJECTS_INDEX_KEY = 'gnflhs_studio_projects_index_v1';
+const STUDIO_COLLECTION = FIRESTORE_COLLECTIONS.STUDIO_PROJECTS;
+const PLATFORM_SETTINGS_COLLECTION = FIRESTORE_COLLECTIONS.PLATFORM_SETTINGS;
+const GLOBAL_PROPS_DOC = FIRESTORE_COLLECTIONS.GLOBAL_PROPERTIES_DOC;
+const LOCAL_PROJECTS_INDEX_KEY = LOCAL_STORAGE_KEYS.STUDIO_PROJECTS_INDEX;
 
 function saveLocalProjectMirror(project: StudioProject) {
   try {
-    localStorage.setItem(`gnflhs_studio_draft_${project.id}`, JSON.stringify(project));
+    localStorage.setItem(
+      `${LOCAL_STORAGE_KEYS.STUDIO_DRAFT_PREFIX}${project.id}`,
+      JSON.stringify(project)
+    );
     const raw = localStorage.getItem(LOCAL_PROJECTS_INDEX_KEY);
     const map: Record<string, StudioProject> = raw ? JSON.parse(raw) : {};
     map[project.id] = project;
@@ -38,7 +48,7 @@ function saveLocalProjectMirror(project: StudioProject) {
 
 function removeLocalProjectMirror(projectId: string) {
   try {
-    localStorage.removeItem(`gnflhs_studio_draft_${projectId}`);
+    localStorage.removeItem(`${LOCAL_STORAGE_KEYS.STUDIO_DRAFT_PREFIX}${projectId}`);
     const raw = localStorage.getItem(LOCAL_PROJECTS_INDEX_KEY);
     if (raw) {
       const map: Record<string, StudioProject> = JSON.parse(raw);
@@ -90,7 +100,7 @@ export function subscribeStudioProjects(callback: (projects: StudioProject[]) =>
 
 export async function getStudioProjectById(projectId: string): Promise<StudioProject | null> {
   try {
-    const localRaw = localStorage.getItem(`gnflhs_studio_draft_${projectId}`);
+    const localRaw = localStorage.getItem(`${LOCAL_STORAGE_KEYS.STUDIO_DRAFT_PREFIX}${projectId}`);
     if (localRaw) {
       return JSON.parse(localRaw) as StudioProject;
     }
@@ -114,7 +124,7 @@ export function subscribeSingleStudioProject(
   callback: (project: StudioProject | null) => void
 ): () => void {
   try {
-    const localRaw = localStorage.getItem(`gnflhs_studio_draft_${projectId}`);
+    const localRaw = localStorage.getItem(`${LOCAL_STORAGE_KEYS.STUDIO_DRAFT_PREFIX}${projectId}`);
     if (localRaw) {
       callback(JSON.parse(localRaw) as StudioProject);
     }
@@ -374,17 +384,23 @@ export function subscribeGlobalProperties(
           callback(data.values || {});
         } else {
           callback({
-            SCHOOL_NAME: '경남외국어고등학교',
-            ACADEMIC_YEAR: '2026'
+            SCHOOL_NAME: PLATFORM_ENV.SCHOOL_NAME,
+            ACADEMIC_YEAR: PLATFORM_ENV.ACADEMIC_YEAR
           });
         }
       },
       () => {
-        callback({ SCHOOL_NAME: '경남외국어고등학교', ACADEMIC_YEAR: '2026' });
+        callback({
+          SCHOOL_NAME: PLATFORM_ENV.SCHOOL_NAME,
+          ACADEMIC_YEAR: PLATFORM_ENV.ACADEMIC_YEAR
+        });
       }
     );
   } catch {
-    callback({ SCHOOL_NAME: '경남외국어고등학교', ACADEMIC_YEAR: '2026' });
+    callback({
+      SCHOOL_NAME: PLATFORM_ENV.SCHOOL_NAME,
+      ACADEMIC_YEAR: PLATFORM_ENV.ACADEMIC_YEAR
+    });
     return () => {};
   }
 }
@@ -404,7 +420,7 @@ export interface CacheEntryInfo {
 }
 
 export function listProjectCacheEntries(projectId: string): CacheEntryInfo[] {
-  const prefix = `gnflhs_cache_${projectId}_`;
+  const prefix = `${LOCAL_STORAGE_KEYS.STUDIO_CACHE_PREFIX}${projectId}_`;
   const result: CacheEntryInfo[] = [];
   try {
     for (let i = 0; i < localStorage.length; i++) {
@@ -430,7 +446,7 @@ export function listProjectCacheEntries(projectId: string): CacheEntryInfo[] {
 }
 
 export function clearProjectCache(projectId: string): number {
-  const prefix = `gnflhs_cache_${projectId}_`;
+  const prefix = `${LOCAL_STORAGE_KEYS.STUDIO_CACHE_PREFIX}${projectId}_`;
   let removed = 0;
   try {
     const keysToRemove: string[] = [];
@@ -468,20 +484,45 @@ export function attachRuntimeRpcBridge(): () => void {
 
     try {
       if (action === 'DB_GET') {
-        const ref = doc(db, 'plugin_data', normalizedScope, 'items', String(args?.key || 'default'));
+        const ref = doc(
+          db,
+          FIRESTORE_COLLECTIONS.PLUGIN_DATA,
+          normalizedScope,
+          FIRESTORE_COLLECTIONS.PLUGIN_DATA_ITEMS,
+          String(args?.key || 'default')
+        );
         const snap = await getDoc(ref);
         reply(snap.exists() ? snap.data().value : null);
       } else if (action === 'DB_SET') {
-        const ref = doc(db, 'plugin_data', normalizedScope, 'items', String(args?.key || 'default'));
+        const ref = doc(
+          db,
+          FIRESTORE_COLLECTIONS.PLUGIN_DATA,
+          normalizedScope,
+          FIRESTORE_COLLECTIONS.PLUGIN_DATA_ITEMS,
+          String(args?.key || 'default')
+        );
         await setDoc(ref, { value: args?.value ?? null, updatedAt: Date.now() });
         reply(true);
       } else if (action === 'DB_REMOVE') {
-        const ref = doc(db, 'plugin_data', normalizedScope, 'items', String(args?.key || 'default'));
+        const ref = doc(
+          db,
+          FIRESTORE_COLLECTIONS.PLUGIN_DATA,
+          normalizedScope,
+          FIRESTORE_COLLECTIONS.PLUGIN_DATA_ITEMS,
+          String(args?.key || 'default')
+        );
         await deleteDoc(ref);
         reply(true);
       } else if (action === 'DB_LIST') {
         const { getDocs } = await import('firebase/firestore');
-        const snap = await getDocs(collection(db, 'plugin_data', normalizedScope, 'items'));
+        const snap = await getDocs(
+          collection(
+            db,
+            FIRESTORE_COLLECTIONS.PLUGIN_DATA,
+            normalizedScope,
+            FIRESTORE_COLLECTIONS.PLUGIN_DATA_ITEMS
+          )
+        );
         const items: Array<{ id: string; value: unknown }> = [];
         snap.forEach((d) => items.push({ id: d.id, value: d.data().value }));
         reply(items);

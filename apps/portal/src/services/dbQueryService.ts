@@ -12,6 +12,7 @@ import {
   WhereFilterOp
 } from 'firebase/firestore';
 import { db } from '@gnflhs/shared-auth';
+import { FIRESTORE_COLLECTIONS } from '@gnflhs/shared-types';
 
 export interface DatabaseRowItem {
   _id: string;
@@ -24,19 +25,9 @@ export interface CollectionMeta {
   isSystem?: boolean;
 }
 
-const KNOWN_COLLECTIONS: CollectionMeta[] = [
-  { name: 'plugins', isSystem: true },
-  { name: 'studio_projects', isSystem: true },
-  { name: 'users', isSystem: true },
-  { name: 'dormitory_records', isSystem: false },
-  { name: 'whiteboard_sessions', isSystem: false },
-  { name: 'study_rooms', isSystem: false },
-  { name: 'platform_settings', isSystem: true },
-  { name: 'storage_meta', isSystem: true }
-];
-
-const COLLECTIONS_REGISTRY_COL = 'platform_settings';
-const COLLECTIONS_REGISTRY_DOC = 'custom_collections';
+const KNOWN_COLLECTIONS: readonly CollectionMeta[] = FIRESTORE_COLLECTIONS.KNOWN_COLLECTIONS;
+const COLLECTIONS_REGISTRY_COL = FIRESTORE_COLLECTIONS.PLATFORM_SETTINGS;
+const COLLECTIONS_REGISTRY_DOC = FIRESTORE_COLLECTIONS.CUSTOM_COLLECTIONS_DOC;
 
 /**
  * 활성 데이터베이스 컬렉션 목록 조회 (시스템 기본 + 사용자 정의)

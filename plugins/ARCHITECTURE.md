@@ -4,10 +4,23 @@
 
 ---
 
+## 0. 2계층(Two-Tier) 중앙집중식 환경변수 & 방어 검증 아키텍처
+
+하드코딩으로 인한 오작동(`NaN`, 레이아웃 붕괴, 환경설정 드리프트, 샌드박스 플래그 불일치)을 원천 방지하기 위해 플랫폼 전체는 **2계층 환경변수 체계**로 동작합니다.
+
+1. **Tier 1 — 플랫폼 전역 설정 (루트 `.env` 단일 원천)**
+   - **Frontend (Vite 4개 워크스페이스 공통)**: `packages/shared-types/src/platformEnv.ts`가 루트 `.env`(`envDir: '../..'`)를 읽어 상·하한 범위 클램핑(`safeInt`, `safeStr`, `safeCsvList`)을 거친 `PLATFORM_ENV`, `FIRESTORE_COLLECTIONS`, `LOCAL_STORAGE_KEYS`, `STORAGE_ROOT_FOLDERS`를 제공합니다.
+   - **Node CLI (`sync-plugins.mjs`, `db-query.mjs`)**: `scripts/load-env.mjs`가 루트 `.env`를 직접 파싱하여 `CLI_FIREBASE_CONFIG`, `CLI_ENV`, `CLI_COLLECTIONS`를 제공합니다.
+2. **Tier 2 — 개별 배포 앱 설정 (`plugins/<app-id>/env.json` + `config.js`)**
+   - 각 앱의 모든 수치·문자열·배열 기본값은 `env.json`에 선언하며, 앱 내부 `config.js`에서 `@gnflhs/sdk`의 `env`를 통해 로드한 뒤 **방어적 클램핑(`clampInt`, `clampFloat`, 비어있지 않은 배열 폴백)**을 거쳐 `Object.freeze(...)` 상수로 노출합니다.
+   - 따라서 스튜디오 환경변수 탭에서 잘못된 값이 입력되더라도 앱 런타임 오작동이 절대 발생하지 않습니다.
+
+---
+
 ## 1. 시스템 보호 경계 (최고관리자 전용 앱 격리)
 
 - **`account-manager` (`/account/`)** 는 최고관리자(`super_admin`) 전용 **통합 계정·권한 시스템 콘솔**입니다.
-- 일반 배포 카탈로그(`Firestore plugins`)나 스튜디오 배포 대상에 절대 등록되지 않으며(`RESERVED_SYSTEM_IDS = ['account-manager']`), 포털 상단 `SUPER ADMIN CONSOLE` 바 및 `<SuperAdminGuard>`를 통해서만 접근할 수 있습니다.
+- 일반 배포 카탈로그(`Firestore plugins`)나 스튜디오 배포 대상에 절대 등록되지 않으며(`VITE_RESERVED_SYSTEM_IDS=account-manager`), 포털 상단 `SUPER ADMIN CONSOLE` 바 및 `<SuperAdminGuard>`를 통해서만 접근할 수 있습니다.
 
 ---
 
@@ -27,15 +40,16 @@
 
 ## 3. 앱 표준 디렉토리 구조 (`plugins/<app-id>/`)
 
-별도의 Webpack/Vite 설정 없이 브라우저 네이티브 `<script type="importmap">` + `@vfs/*` 가상 모듈 컴파일러가 자동 결합합니다.
+별도의 Webpack/Vite 설정 없이 브라우저 네이티브 `<script type="importmap">` + `@vfs/*` 가상 모듈 컴파일러(`apps/portal/src/services/studioCompiler.ts` 및 `services/compiler/*`)가 상대경로 로컬 모듈(`./config.js` 등)을 `@vfs/*` Bare Specifier로 자동 매핑·결합합니다.
 
 ```text
 plugins/<app-id>/
  ├── index.html     # 앱 마크업 (<script type="module" src="./script.js"></script>)
- ├── script.js      # 메인 엔트리 ES 모듈 (import 문 자유 사용)
- ├── state.js       # (선택) 상태·상수·비즈니스 로직 분리 모듈 (갯수 제한 없음)
+ ├── config.js      # env.json 로드 및 방어적 범위 검증(clamp) 전용 설정 모듈
+ ├── state.js       # 상태·스토리지·도메인 비즈니스 로직 모듈 (기능별 자유 분할)
+ ├── script.js      # 메인 엔트리 UI 렌더링 & 이벤트 컨트롤러
  ├── style.css      # 스타일시트 (:root { --env-* } CSS 변수 자동 주입)
- └── env.json       # 선언형 환경변수 (코드 수정 없이 학교명·기본값·컬럼수 제어)
+ └── env.json       # 선언형 환경변수 (코드 수정 없이 학교명·수치·컬럼수 제어)
 ```
 
 ---
@@ -89,7 +103,7 @@ node scripts/sync-plugins.mjs scaffold club-apply "동아리 수강신청"
 node scripts/sync-plugins.mjs push seating-chart
 
 # 4. 로컬 수정본을 HEAD 동기화 + 정식 운영(LIVE) 버전 스냅샷으로 즉시 릴리즈
-node scripts/sync-plugins.mjs deploy seating-chart 1.2.0 "인쇄 옵션 개선"
+node scripts/sync-plugins.mjs deploy seating-chart 1.3.0 "5단 모듈화 및 환경변수 분리"
 
 # 5. 운영(LIVE) 배포본 소스를 로컬 plugins/ 폴더로 내려받기
 node scripts/sync-plugins.mjs pull
