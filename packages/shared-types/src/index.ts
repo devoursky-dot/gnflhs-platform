@@ -25,6 +25,8 @@ export interface AppPlugin {
   status: PluginStatus; // 🟢 운영중 / 🟡 개발테스트중 / ⚪ 비활성화
   entryUrl: string; // 실행 URL
   allowedRoles: UserRole[]; // 실행 권한
+  codeType?: 'url' | 'inline_html'; // 'url': 정적 빌드 배포본, 'inline_html': 플랫폼 내 직접 입력한 핫스왑 코드
+  customCode?: string; // 실시간 핫스왑 소스코드 (HTML/JS/CSS 통합)
   updatedAt: number;
 }
 

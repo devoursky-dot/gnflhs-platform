@@ -4,13 +4,17 @@ import { auth, loginWithGoogle, logout, isSuperAdmin, SUPER_ADMIN_EMAIL } from '
 import { AppPlugin } from '@gnflhs/shared-types';
 import { subscribePlugins } from './services/pluginService';
 import { PluginManagerModal } from './components/PluginManagerModal';
-import { LayoutGrid, LogIn, LogOut, ShieldCheck, PenTool, Users, ShieldAlert, Puzzle, Sparkles, ExternalLink, RefreshCw } from 'lucide-react';
+import { PluginDevStudioModal } from './components/PluginDevStudioModal';
+import { DynamicRunnerModal } from './components/DynamicRunnerModal';
+import { LayoutGrid, LogIn, LogOut, ShieldCheck, PenTool, Users, ShieldAlert, Puzzle, Sparkles, ExternalLink, RefreshCw, Code2, Zap } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [plugins, setPlugins] = useState<AppPlugin[]>([]);
   const [devModeActive, setDevModeActive] = useState<boolean>(true); // 개발자 모드 기본 ON
   const [isManagerOpen, setIsManagerOpen] = useState(false);
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [activeDynamicPlugin, setActiveDynamicPlugin] = useState<AppPlugin | null>(null);
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (user) => {
@@ -151,9 +155,29 @@ export default function App() {
             </label>
 
             <button
+              onClick={() => setIsStudioOpen(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 14px',
+                backgroundColor: '#059669',
+                color: '#fff',
+                border: '1px solid #10b981',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(5, 150, 105, 0.4)'
+              }}
+            >
+              <Code2 size={15} /> 실시간 코드 개발 스튜디오
+            </button>
+
+            <button
               onClick={() => setIsManagerOpen(true)}
               style={{
-                padding: '4px 12px',
+                padding: '5px 12px',
                 backgroundColor: '#4338ca',
                 color: '#fff',
                 border: '1px solid #6366f1',
@@ -187,7 +211,13 @@ export default function App() {
           {visiblePlugins.map((p) => (
             <div
               key={p.id}
-              onClick={() => window.location.href = p.entryUrl}
+              onClick={() => {
+                if (p.codeType === 'inline_html' && p.customCode) {
+                  setActiveDynamicPlugin(p);
+                } else {
+                  window.location.href = p.entryUrl;
+                }
+              }}
               style={{
                 backgroundColor: '#fff',
                 borderRadius: '16px',
@@ -228,28 +258,46 @@ export default function App() {
                     {getPluginIcon(p.icon)}
                   </div>
 
-                  {p.status === 'development' ? (
-                    <span style={{
-                      fontSize: '11px',
-                      fontWeight: 'bold',
-                      backgroundColor: '#fef3c7',
-                      color: '#b45309',
-                      padding: '3px 8px',
-                      borderRadius: '12px'
-                    }}>
-                      🟡 BETA TEST
-                    </span>
-                  ) : (
-                    <span style={{
-                      fontSize: '11px',
-                      color: '#64748b',
-                      backgroundColor: '#f1f5f9',
-                      padding: '2px 6px',
-                      borderRadius: '4px'
-                    }}>
-                      v{p.version}
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    {p.codeType === 'inline_html' && (
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        backgroundColor: '#dcfce7',
+                        color: '#15803d',
+                        padding: '3px 8px',
+                        borderRadius: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px'
+                      }}>
+                        <Zap size={11} /> 핫스왑
+                      </span>
+                    )}
+
+                    {p.status === 'development' ? (
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        backgroundColor: '#fef3c7',
+                        color: '#b45309',
+                        padding: '3px 8px',
+                        borderRadius: '12px'
+                      }}>
+                        🟡 BETA
+                      </span>
+                    ) : (
+                      <span style={{
+                        fontSize: '11px',
+                        color: '#64748b',
+                        backgroundColor: '#f1f5f9',
+                        padding: '2px 6px',
+                        borderRadius: '4px'
+                      }}>
+                        v{p.version}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* 제목 및 설명 */}
@@ -285,6 +333,19 @@ export default function App() {
         isOpen={isManagerOpen}
         onClose={() => setIsManagerOpen(false)}
         plugins={plugins}
+      />
+
+      {/* 실시간 코드 개발 스튜디오 모달 */}
+      <PluginDevStudioModal
+        isOpen={isStudioOpen}
+        onClose={() => setIsStudioOpen(false)}
+        plugins={plugins}
+      />
+
+      {/* 핫스왑된 플러그인 전체화면 런타임 러너 */}
+      <DynamicRunnerModal
+        plugin={activeDynamicPlugin}
+        onClose={() => setActiveDynamicPlugin(null)}
       />
     </div>
   );

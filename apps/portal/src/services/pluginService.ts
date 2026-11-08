@@ -82,6 +82,30 @@ export async function updatePlugin(plugin: AppPlugin): Promise<void> {
 }
 
 /**
+ * 실시간 핫스왑 코드 주입 (배포 없이 브라우저에서 바로 코드로 기존 앱 교체)
+ */
+export async function hotSwapPluginCode(pluginId: string, customCode: string): Promise<void> {
+  const docRef = doc(db, PLUGINS_COLLECTION, pluginId);
+  await setDoc(docRef, {
+    codeType: 'inline_html',
+    customCode: customCode,
+    updatedAt: Date.now()
+  }, { merge: true });
+}
+
+/**
+ * 핫스왑 코드를 정적 기본 빌드 버전으로 롤백
+ */
+export async function resetPluginToBuildVersion(pluginId: string): Promise<void> {
+  const docRef = doc(db, PLUGINS_COLLECTION, pluginId);
+  await setDoc(docRef, {
+    codeType: 'url',
+    customCode: '',
+    updatedAt: Date.now()
+  }, { merge: true });
+}
+
+/**
  * 기본 플러그인 초기 시딩
  */
 export async function seedDefaultPlugins(): Promise<void> {
