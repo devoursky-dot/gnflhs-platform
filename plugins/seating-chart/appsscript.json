@@ -1,0 +1,21 @@
+{
+  "timeZone": "Asia/Seoul",
+  "dependencies": {
+    "libraries": [
+      {
+        "userSymbol": "GNFLHS",
+        "libraryId": "gnflhs-core-runtime",
+        "version": "HEAD",
+        "developmentMode": true
+      },
+      {
+        "userSymbol": "GNUI",
+        "libraryId": "gnflhs-ui-kit",
+        "version": "HEAD",
+        "developmentMode": true
+      }
+    ]
+  },
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8"
+}

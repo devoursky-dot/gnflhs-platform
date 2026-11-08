@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GNFLHS 스마트 좌석배치도</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 1. 최상단 탭 바 (다중 배치도 관리) -->
+  <header id="tabHeader">
+    <div id="tabsContainer"></div>
+    <button id="btnAddTab" class="icon-btn" title="새 좌석배치도 추가">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>새 배치도</span>
+    </button>
+  </header>
+
+  <!-- 2. 메인 툴바 -->
+  <div id="mainToolbar">
+    <div class="toolbar-left">
+      <!-- 통로 그리기 모드 & 빠른 분할 -->
+      <button id="btnDrawAisle" class="tool-btn" title="마우스 드래그로 교실 통로(복도) 그리기">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m2-6h6m2 8h6"/></svg>
+        <span>통로 그리기</span>
+      </button>
+
+      <button id="btnAddVerticalAisle" class="tool-btn" title="세로 통로(분단) 추가">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>
+        <span>+ 분단 추가</span>
+      </button>
+
+      <button id="btnSelectAll" class="tool-btn" title="모든 구역 일괄 다중선택">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+        <span>전체 선택</span>
+      </button>
+
+      <div class="divider"></div>
+
+      <!-- 자리 추첨 & 초기화 -->
+      <button id="btnRandomAssign" class="tool-btn highlight" title="명렬표 학생들을 빈자리에 랜덤 추첨 배정">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        <span>랜덤 자리뽑기</span>
+      </button>
+
+      <button id="btnClearDesks" class="tool-btn danger" title="모든 책상의 배정 학생 비우기">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        <span>자리 비우기</span>
+      </button>
+
+      <button id="btnPrint" class="tool-btn" title="교실 부착용 A4 인쇄 / PDF 출력">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+        <span>A4 인쇄</span>
+      </button>
+    </div>
+
+    <div class="toolbar-right">
+      <span id="saveStatusBadge" class="save-badge">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <span>로컬 자동저장됨</span>
+      </span>
+
+      <!-- 명렬표 사이드바 토글 버튼 -->
+      <button id="btnToggleRoster" class="tool-btn active-toggle" title="수업용 출석 명렬표 서랍 열기/닫기">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 12h6m-6 4h6"/></svg>
+        <span>출석 명렬표</span>
+        <span id="rosterCountPill" class="pill">0/0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 3. 메인 작업 영역 (교실 캔버스 + 명렬표 사이드바) -->
+  <div id="workspace">
+    <!-- 좌측/중앙: 교실 캔버스 -->
+    <main id="classroomCanvas" tabindex="0">
+      <!-- 상단 교실 뒤편 안내 바 -->
+      <div class="back-wall-indicator">
+        <span>교실 뒤편 · 사물함 및 게시판 영역</span>
+      </div>
+
+      <!-- 분단 및 통로가 렌더링되는 인터랙티브 보드 -->
+      <div id="zonesContainer"></div>
+
+      <!-- 드래그로 통로 그릴 때 나타나는 힌트 레이어 -->
+      <div id="drawingOverlay"></div>
+
+      <!-- 플로팅 다중선택 일괄 변경 바 (구역/줄 선택 시 표시) -->
+      <div id="batchControlBar" class="hidden">
+        <div class="batch-info">
+          <span id="batchSelectCount">0</span>개 구역 선택됨
+        </div>
+        <div class="batch-controls">
+          <div class="stepper-unit">
+            <span class="label">행(줄)수:</span>
+            <button class="step-btn" id="btnBatchRowMinus">-</button>
+            <span class="val" id="batchRowVal">4</span>
+            <button class="step-btn" id="btnBatchRowPlus">+</button>
+          </div>
+          <div class="stepper-unit">
+            <span class="label">책상수:</span>
+            <button class="step-btn" id="btnBatchDeskMinus">-</button>
+            <span class="val" id="batchDeskVal">2</span>
+            <button class="step-btn" id="btnBatchDeskPlus">+</button>
+          </div>
+          <button id="btnBatchDeselect" class="tool-btn small">선택 해제</button>
+        </div>
+      </div>
+
+      <!-- 하단 기준점: [교탁 / 전면 칠판] -->
+      <div id="podiumArea">
+        <div id="teacherDesk" title="클릭하여 반 이름(교탁 명칭)을 변경하세요">
+          <div class="desk-icon">👨‍🏫</div>
+          <div class="desk-content">
+            <span id="teacherClassName" class="desk-title">2학년 3반 교탁</span>
+            <span class="desk-sub">전면 칠판 기준 (교사 시점)</span>
+          </div>
+          <div class="desk-edit-hint">✏️ 이름 수정</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- 우측: 수업용 학생 명렬표 서랍 (토글 가능) -->
+    <aside id="rosterSidebar">
+      <div class="roster-header">
+        <div class="roster-title-group">
+          <h3>출석 명렬표</h3>
+          <span class="sub-hint">드래그하여 책상에 직접 배정</span>
+        </div>
+        <button id="btnCloseRoster" class="icon-btn-ghost" title="명렬표 서랍 접기">✕</button>
+      </div>
+
+      <!-- 명렬표 빠른 설정 바: 총원 설정 + 번호 자동입력 체크 -->
+      <div class="roster-config-bar">
+        <div class="config-item">
+          <label for="totalStudentCount">학급 총원:</label>
+          <div class="number-input-wrap">
+            <input type="number" id="totalStudentCount" min="1" max="60" value="24">
+            <span class="unit">명</span>
+          </div>
+        </div>
+
+        <label class="checkbox-label" title="체크 시 1번부터 자동으로 번호가 순차 부여됩니다">
+          <input type="checkbox" id="chkAutoNumber" checked>
+          <span>번호 자동입력</span>
+        </label>
+      </div>
+
+      <!-- 명렬표 액션 버튼: 일괄 입력 / 전체 배정 -->
+      <div class="roster-actions">
+        <button id="btnBatchPaste" class="roster-action-btn" title="나이스(NEIS) 또는 엑셀에서 명단 복사해 붙여넣기">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+          <span>명단 일괄 붙여넣기</span>
+        </button>
+        <button id="btnAddSingleStudent" class="roster-action-btn" title="학생 1명 추가">
+          <span>+ 학생 추가</span>
+        </button>
+      </div>
+
+      <!-- 학생 목록 리스트 -->
+      <div id="rosterListContainer"></div>
+
+      <!-- 명렬표 하단 정보 및 초기화 -->
+      <div class="roster-footer">
+        <div class="roster-stat-row">
+          <span>배정 완료: <strong id="assignedStat">0</strong>명</span>
+          <span>미배정: <strong id="unassignedStat">0</strong>명</span>
+        </div>
+        <button id="btnResetRoster" class="text-danger-btn" title="명렬표 학생 전체 삭제">명렬 초기화</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 모달: 명단 일괄 붙여넣기 -->
+  <div id="pasteModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>명단 일괄 붙여넣기</h3>
+        <button id="btnClosePasteModal" class="icon-btn-ghost">✕</button>
+      </div>
+      <p class="modal-desc">
+        나이스(NEIS) 또는 엑셀에서 학생 명단을 복사하여 아래에 붙여넣으세요.<br>
+        한 줄에 한 명씩 자동으로 번호와 이름이 분리되어 등록됩니다.
+      </p>
+      <textarea id="pasteTextarea" rows="10" placeholder="1 김민준&#10;2 이서연&#10;3 박도윤&#10;..."></textarea>
+      <div class="modal-footer">
+        <button id="btnCancelPaste" class="btn-secondary">취소</button>
+        <button id="btnApplyPaste" class="btn-primary">명단 일괄 적용</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 인라인 책상 편집 미니 모달 -->
+  <div id="deskEditModal" class="modal-overlay hidden">
+    <div class="modal-card small">
+      <div class="modal-header">
+        <h3>책상 학생 지정</h3>
+        <button id="btnCloseDeskModal" class="icon-btn-ghost">✕</button>
+      </div>
+      <div class="form-row">
+        <label>학생 번호:</label>
+        <input type="number" id="editDeskNo" placeholder="예: 7">
+      </div>
+      <div class="form-row">
+        <label>학생 이름:</label>
+        <input type="text" id="editDeskName" placeholder="예: 홍길동">
+      </div>
+      <div class="modal-footer">
+        <button id="btnClearDeskItem" class="btn-danger">자리 비우기</button>
+        <button id="btnSaveDeskItem" class="btn-primary">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
