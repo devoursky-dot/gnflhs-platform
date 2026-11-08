@@ -39,8 +39,12 @@ async function runCli() {
   if (trimmed === 'list') {
     console.log('\n=== FIRESTORE COLLECTIONS ===');
     for (const c of CLI_COLLECTIONS.KNOWN_LIST) {
-      const snap = await getDocs(query(collection(db, c), firestoreLimit(1)));
-      console.log(` - ${c} (hasData: ${!snap.empty})`);
+      try {
+        const snap = await getDocs(query(collection(db, c), firestoreLimit(1)));
+        console.log(` - ${c} (hasData: ${!snap.empty})`);
+      } catch (err) {
+        console.log(` - ${c} (protected: ${err?.code || 'auth-required'})`);
+      }
     }
     return;
   }
