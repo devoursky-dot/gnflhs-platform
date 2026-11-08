@@ -1,0 +1,35 @@
+{
+  "hosting": [
+    {
+      "target": "portal",
+      "public": "apps/portal/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "/whiteboard/**",
+          "destination": "/whiteboard/index.html"
+        },
+        {
+          "source": "/account/**",
+          "destination": "/account/index.html"
+        },
+        {
+          "source": "/dormitory/**",
+          "destination": "/dormitory/index.html"
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

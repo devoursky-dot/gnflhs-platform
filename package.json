@@ -1,0 +1,17 @@
+{
+  "name": "gnflhs-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:portal": "npm --prefix apps/portal run dev",
+    "dev:account": "npm --prefix apps/account-manager run dev",
+    "dev:whiteboard": "npm --prefix apps/whiteboard-note run dev",
+    "dev:dormitory": "npm --prefix apps/dormitory-penalty run dev",
+    "build:all": "npm --prefix apps/portal run build && npm --prefix apps/account-manager run build && npm --prefix apps/whiteboard-note run build && npm --prefix apps/dormitory-penalty run build",
+    "deploy:firebase": "firebase deploy"
+  }
+}

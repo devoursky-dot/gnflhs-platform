@@ -1,0 +1,21 @@
+# Node dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.output/
+
+# Firebase cache
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+
+# Environment files
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db

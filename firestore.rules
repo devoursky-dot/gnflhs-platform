@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 헬퍼 함수: 최고관리자 여부 확인
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == "devoursky@gmail.com";
+    }
+
+    // 헬퍼 함수: 인증된 사용자 여부
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 플러그인 레지스트리 (모듈 카탈로그)
+    match /plugins/{pluginId} {
+      allow read: if true; // 누구나 설치된 활성 플러그인 조회 가능
+      allow write: if isSuperAdmin(); // 플러그인 등록/해제/수정은 최고관리자만
+    }
+
+    // 사용자 계정 목록
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    // 전자칠판 공유 캔버스 데이터
+    match /whiteboard_sessions/{sessionId} {
+      allow read, write: if true; // 전자칠판은 학교 내 누구나 판서 및 공유 가능
+    }
+
+    // 기숙사 벌점 데이터
+    match /dormitory_records/{recordId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+  }
+}
