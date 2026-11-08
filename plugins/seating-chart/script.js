@@ -264,13 +264,13 @@ function renderCanvas() {
 
   tab.zones.forEach((zone, zIdx) => {
     const maxDesks = zone.maxDesks || 2;
-    // 책상 1개 너비 90px, 간격 10px ➔ 슬롯당 100px
-    const trackWidth = maxDesks * 100 + 4;
+    // 책상 1개 너비 90px (한 분단 내에서는 짝꿍 책상끼리 완전 밀착 배치하여 통로와 명확히 구분)
+    const trackWidth = maxDesks * 90;
 
     const zoneCol = document.createElement('div');
     zoneCol.className = 'zone-column';
     zoneCol.dataset.zoneId = zone.id;
-    zoneCol.style.minWidth = `${trackWidth + 24}px`;
+    zoneCol.style.minWidth = `${trackWidth + 16}px`;
 
     // 분단 헤더
     const header = document.createElement('div');
@@ -390,8 +390,8 @@ function createDeskCardElement(zone, row, desk, maxDesks) {
   card.dataset.deskId = desk.id;
   card.draggable = !appState.isEditMode; // 조절 모드가 아닐 때만 자리배치 드래그 가능
 
-  // 슬롯 위치 기반 정밀 배치: pos * 100px (0.5 단위 지원)
-  const leftPx = (desk.pos || 0) * 100;
+  // 슬롯 위치 기반 정밀 배치: pos * 90px (한 분단 내 책상끼리는 0px 간격으로 밀착 배치)
+  const leftPx = (desk.pos || 0) * 90;
   card.style.left = `${leftPx}px`;
 
   // 상단 바: 번호 뱃지 + [조절 모드 시 삭제 ✕ 버튼]
@@ -1157,14 +1157,14 @@ function initEventListeners() {
       const studentName = nameEl.textContent.trim();
       if (!studentName) return;
 
-      // 책상 카드 너비 88px 기준 가용 폭 산출
-      let maxAllowedWidth = 80;
+      // 책상 카드 너비 90px 기준 가용 폭 산출 (좌우 패딩 4px씩 제외 ➔ 82px)
+      let maxAllowedWidth = 82;
       if (!isTwoLine) {
         // 단일 행 포맷(이름(번호) / 번호 이름)의 경우 번호 텍스트 폭 공제
         const subEl = item.querySelector('.dp-sub');
         const subText = subEl ? subEl.textContent.trim() : '';
         const subWidth = subText ? (subText.length * 8 + 12) : 0;
-        maxAllowedWidth = Math.max(42, 80 - subWidth);
+        maxAllowedWidth = Math.max(44, 82 - subWidth);
       }
 
       const textWidth = measureCtx ? measureCtx.measureText(studentName).width : (studentName.length * baseFontSize * 0.9);

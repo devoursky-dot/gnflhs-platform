@@ -1120,7 +1120,7 @@ textarea {
 /* ================= 9. A4 인쇄 스타일 (@media print) ================= */
 @page {
   size: landscape;
-  margin: 6mm 8mm;
+  margin: 8mm 12mm; /* 좌우 12mm 안전 여백으로 물리적 프린터의 좌측 테두리 잘림 완전 방지 */
 }
 
 @media print {
@@ -1164,13 +1164,13 @@ textarea {
     width: 100% !important;
     height: 100% !important;
     max-height: 100vh !important;
-    overflow: hidden !important;
-    padding: 0 !important;
+    overflow: visible !important;
+    padding: 2px 8px !important;
     gap: 16px !important;
     box-sizing: border-box !important;
   }
 
-  /* 3. 교실 캔버스 (책상들만 정갈하게 배치) */
+  /* 3. 교실 캔버스 (책상들만 정갈하게 배치 & 좌측 테두리선 잘림 방지) */
   #classroomCanvas {
     flex: 1 !important;
     display: flex !important;
@@ -1178,8 +1178,8 @@ textarea {
     justify-content: space-between !important;
     align-items: center !important;
     background: transparent !important;
-    padding: 4px 0 !important;
-    overflow: hidden !important;
+    padding: 4px 14px !important; /* 좌측 책상 테두리선 여유 공간 확보 */
+    overflow: visible !important;
     height: 100% !important;
     max-height: 100vh !important;
   }
@@ -1190,9 +1190,10 @@ textarea {
     flex-direction: row !important;
     align-items: center !important;
     justify-content: center !important;
-    gap: 32px !important; /* 분단 사이 세로 통로: 최소 10픽셀 이상(32px) 확실한 공간 확보 */
+    gap: 36px !important; /* 분단 사이 세로 통로: 36px의 시원하고 명확한 통로 공간 (한 분단 내 밀착 책상과 완벽 대비) */
     width: 100% !important;
-    overflow: hidden !important;
+    overflow: visible !important;
+    padding: 2px 6px !important;
   }
 
   .zone-column {
@@ -1209,20 +1210,21 @@ textarea {
   }
 
   .zone-row {
-    margin-bottom: 14px !important; /* 줄(행) 사이 가로 통로: 14px 확보 (10픽셀 이상) */
+    margin-bottom: 14px !important; /* 줄(행) 사이 가로 통로: 14px 확보 */
     border: none !important;
     background: transparent !important;
   }
 
-  /* 4. 책상 카드 인쇄 디자인 (흑백 고대비, 폭 88px 지정으로 책상 간 통로 12px 확보) */
+  /* 4. 책상 카드 인쇄 디자인 (한 분단 내 책상은 0px 간격으로 밀착, 분단 간에는 36px 통로) */
   .desk-card {
     background: #ffffff !important;
     color: #000000 !important;
     border: 2px solid #000000 !important;
     box-shadow: none !important;
-    border-radius: 6px !important;
-    width: 88px !important; /* 슬롯 간격 100px 대비 책상 폭 88px -> 좌우 책상 사이 통로 12px 확보 (10픽셀 이상) */
+    border-radius: 4px !important;
+    width: 90px !important; /* 슬롯 간격 90px과 1:1 일치 ➔ 한 분단 내 책상끼리 완전 밀착(붙여서 배치) */
     height: 60px !important;
+    box-sizing: border-box !important;
   }
 
   .desk-card:not(.assigned) {
