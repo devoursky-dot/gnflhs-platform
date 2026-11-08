@@ -5,7 +5,7 @@ import { fetchAllUsers, deleteUser } from './services/accountService';
 import { UserAccount } from '@gnflhs/shared-types';
 import { Users, ClipboardPaste, Search, Trash2, Home, Filter, ShieldCheck, GraduationCap, School } from 'lucide-react';
 
-export default function App() {
+function AccountManagerContent() {
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -46,8 +46,7 @@ export default function App() {
   };
 
   return (
-    <SuperAdminGuard>
-      <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'sans-serif', color: '#1e293b' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'sans-serif', color: '#1e293b' }}>
         {/* 상단 네비게이션 */}
         <header style={{
           backgroundColor: '#fff',
@@ -234,6 +233,13 @@ export default function App() {
           onImportComplete={loadData}
         />
       </div>
+  );
+}
+
+export default function App() {
+  return (
+    <SuperAdminGuard>
+      <AccountManagerContent />
     </SuperAdminGuard>
   );
 }

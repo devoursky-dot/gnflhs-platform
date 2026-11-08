@@ -10,6 +10,8 @@ interface SuperAdminGuardProps {
 export const SuperAdminGuard: React.FC<SuperAdminGuardProps> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -18,6 +20,19 @@ export const SuperAdminGuard: React.FC<SuperAdminGuardProps> = ({ children }) =>
     });
     return () => unsubscribe();
   }, []);
+
+  const handleLogin = async () => {
+    setIsLoggingIn(true);
+    setLoginError(null);
+    try {
+      await loginWithGoogle();
+    } catch (err: any) {
+      console.error('Login action error:', err);
+      setLoginError(err?.message || '로그인 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -37,8 +52,14 @@ export const SuperAdminGuard: React.FC<SuperAdminGuardProps> = ({ children }) =>
           <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '24px', lineHeight: 1.5 }}>
             이 계정관리 시스템은 보안을 위해 최고 관리자(<strong>{SUPER_ADMIN_EMAIL}</strong>) 전용으로 엄격히 제한되어 있습니다.
           </p>
+          {loginError && (
+            <div style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '10px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px' }}>
+              {loginError}
+            </div>
+          )}
           <button
-            onClick={() => loginWithGoogle()}
+            onClick={handleLogin}
+            disabled={isLoggingIn}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -46,17 +67,17 @@ export const SuperAdminGuard: React.FC<SuperAdminGuardProps> = ({ children }) =>
               gap: '10px',
               width: '100%',
               padding: '12px',
-              backgroundColor: '#2563eb',
+              backgroundColor: isLoggingIn ? '#93c5fd' : '#2563eb',
               color: '#fff',
               border: 'none',
               borderRadius: '8px',
               fontSize: '15px',
               fontWeight: 'bold',
-              cursor: 'pointer'
+              cursor: isLoggingIn ? 'not-allowed' : 'pointer'
             }}
           >
             <LogIn size={18} />
-            Google 관리자 계정으로 로그인
+            {isLoggingIn ? '로그인 창 여는 중...' : 'Google 관리자 계정으로 로그인'}
           </button>
         </div>
       </div>

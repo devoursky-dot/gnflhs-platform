@@ -30,6 +30,14 @@ function copyDir(src, dest) {
 
 console.log('=== GNFLHS PLATFORM UNIFIED BUILD & BUNDLE ===');
 
+// Clean dist folders
+for (const app of ['portal', 'whiteboard-note', 'account-manager', 'dormitory-penalty']) {
+  const d = path.join(rootDir, 'apps', app, 'dist');
+  if (fs.existsSync(d)) {
+    fs.rmSync(d, { recursive: true, force: true });
+  }
+}
+
 // 1. Build all 4 apps
 run('npm run build', path.join(rootDir, 'apps', 'portal'));
 run('npm run build', path.join(rootDir, 'apps', 'whiteboard-note'));
