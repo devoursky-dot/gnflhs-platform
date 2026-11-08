@@ -98,6 +98,20 @@ async function handlePush(idFilter) {
       }, { merge: true });
     }
 
+    // 3. seating-chart의 경우 현재 열려있는 테스트러너 프로젝트(proj-mw7m26y7)에도 즉시 동기화
+    if (pid === 'seating-chart') {
+      const activeStudioRef = doc(db, 'studio_projects', 'proj-mw7m26y7');
+      const activeSnap = await getDoc(activeStudioRef);
+      const activeData = activeSnap.exists() ? activeSnap.data() : {};
+      await setDoc(activeStudioRef, {
+        ...activeData,
+        id: 'proj-mw7m26y7',
+        files,
+        updatedAt: Date.now()
+      }, { merge: true });
+      console.log(`  ✓ Synced '${pid}' to Firestore studio_projects/proj-mw7m26y7 (Live Test Runner).`);
+    }
+
     console.log(`  ✓ Synced '${pid}' to Firestore studio_projects & plugins.`);
   }
   console.log('\n✓ Push completed successfully.');

@@ -875,6 +875,111 @@ body.edit-mode .zone-column {
   color: #64748b;
 }
 
+/* ================= 8-1. 인쇄 설정 모달 전용 스타일 ================= */
+.print-modal-card {
+  width: 520px;
+  max-width: 95vw;
+}
+
+.print-config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.print-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: -0.2px;
+}
+
+.print-format-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.format-card-label {
+  cursor: pointer;
+  position: relative;
+}
+
+.format-card-label input[type="radio"] {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  accent-color: var(--accent-blue);
+  cursor: pointer;
+}
+
+.format-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background-color: #0f172a;
+  border: 1.5px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+  transition: all 0.15s ease;
+  min-height: 72px;
+}
+
+.format-card-label input[type="radio"]:checked + .format-card {
+  border-color: #38bdf8;
+  background-color: #0c2136;
+  box-shadow: 0 0 0 1px #38bdf8;
+}
+
+.fmt-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+.fmt-preview {
+  font-size: 14px;
+  font-weight: 800;
+  color: #38bdf8;
+}
+
+.fmt-preview.stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+}
+
+.fmt-preview.stacked .fmt-no {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.fmt-preview.stacked .fmt-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: #38bdf8;
+}
+
+.print-page-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #0c1a2d;
+  border: 1px solid #1e3a5f;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #7dd3fc;
+}
+
 .print-option-wrap {
   background-color: #111827;
   border: 1px solid #1f2937;
@@ -953,65 +1058,334 @@ textarea {
   cursor: pointer;
 }
 
+/* ================= 화면 표시 시 인쇄 전용 요소 감춤 ================= */
+.desk-print-view {
+  display: none !important;
+}
+
 /* ================= 9. A4 인쇄 스타일 (@media print) ================= */
+@page {
+  size: landscape;
+  margin: 6mm 8mm;
+}
+
 @media print {
-  body {
+  html, body {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
     background: #ffffff !important;
     color: #000000 !important;
-    height: auto !important;
-    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
   }
-  #tabHeader, #mainToolbar, #finishControlBar, .edit-only, .desk-edit-hint {
+
+  /* 1. 상단 탭, 메인 툴바, 교실 뒤편 안내, 분단 헤더, 편집 버튼, 여백 가이드 등 불필요한 설명 및 UI 전면 제거 */
+  #tabHeader,
+  #mainToolbar,
+  #finishControlBar,
+  .back-wall-indicator,
+  .zone-header,
+  .empty-slot-guide,
+  .desk-add-btn,
+  .desk-del-btn,
+  .desk-shift-bar,
+  .desk-top-bar,
+  .desk-name,
+  .desk-edit-hint,
+  .edit-only,
+  .modal-overlay {
     display: none !important;
   }
-  #classroomCanvas {
-    background: transparent !important;
+
+  /* 2. 전체 워크스페이스 레이아웃 (좌측: 책상 배치 / 우측: 명렬표 균등 분배) */
+  #workspace {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
     padding: 0 !important;
-    overflow: visible !important;
+    gap: 16px !important;
+    box-sizing: border-box !important;
   }
+
+  /* 3. 교실 캔버스 (책상들만 정갈하게 배치) */
+  #classroomCanvas {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    background: transparent !important;
+    padding: 4px 0 !important;
+    overflow: hidden !important;
+    height: 100% !important;
+    max-height: 100vh !important;
+  }
+
+  #zonesContainer {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 24px !important;
+    width: 100% !important;
+    overflow: hidden !important;
+  }
+
   .zone-column {
     background: transparent !important;
-    border: 1px solid #000000 !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 14px !important;
+    min-width: 0 !important;
   }
+
+  .zone-row {
+    margin-bottom: 8px !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  /* 4. 책상 카드 인쇄 디자인 (흑백 고대비, 깔끔한 윤곽) */
   .desk-card {
     background: #ffffff !important;
     color: #000000 !important;
     border: 2px solid #000000 !important;
     box-shadow: none !important;
+    border-radius: 6px !important;
   }
-  .desk-name { color: #000000 !important; }
-  .desk-no-badge { background: #eee !important; color: #000000 !important; }
-  #teacherDesk {
-    background: #f3f4f6 !important;
-    border: 2px solid #000 !important;
-    color: #000 !important;
-    box-shadow: none !important;
-  }
-  .desk-title { color: #000000 !important; }
 
-  /* 명렬표 포함 인쇄 여부 제어 */
+  .desk-card:not(.assigned) {
+    border: 1.5px dashed #999999 !important;
+    background: #fafafa !important;
+  }
+
+  /* 5. 책상 인쇄 뷰 및 폰트 최대화 */
+  .desk-print-view {
+    display: flex !important;
+    width: 100% !important;
+    height: 100% !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    padding: 2px 4px !important;
+    box-sizing: border-box !important;
+  }
+
+  .desk-print-view .dp-item {
+    display: none !important;
+    width: 100%;
+  }
+
+  /* 포맷 1: 이름(번호) */
+  body[data-print-format="name-num-bracket"] .dp-format-bracket,
+  body:not([data-print-format]) .dp-format-bracket {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 20px !important;
+    font-weight: 900 !important;
+    color: #000000 !important;
+    letter-spacing: -0.5px !important;
+    word-break: keep-all !important;
+  }
+
+  /* 포맷 2: 번호 이름 */
+  body[data-print-format="num-name"] .dp-format-num-name {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 20px !important;
+    font-weight: 900 !important;
+    color: #000000 !important;
+    letter-spacing: -0.5px !important;
+    word-break: keep-all !important;
+  }
+
+  /* 포맷 3: 위-번호 아래-이름 */
+  body[data-print-format="top-num-bot-name"] .dp-format-top-num-bot-name {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1.15 !important;
+  }
+  body[data-print-format="top-num-bot-name"] .dp-format-top-num-bot-name .dp-sub {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    color: #333333 !important;
+  }
+  body[data-print-format="top-num-bot-name"] .dp-format-top-num-bot-name .dp-main {
+    font-size: 23px !important;
+    font-weight: 900 !important;
+    color: #000000 !important;
+    letter-spacing: -0.5px !important;
+  }
+
+  /* 포맷 4: 위-이름 아래-번호 */
+  body[data-print-format="top-name-bot-num"] .dp-format-top-name-bot-num {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1.15 !important;
+  }
+  body[data-print-format="top-name-bot-num"] .dp-format-top-name-bot-num .dp-main {
+    font-size: 23px !important;
+    font-weight: 900 !important;
+    color: #000000 !important;
+    letter-spacing: -0.5px !important;
+  }
+  body[data-print-format="top-name-bot-num"] .dp-format-top-name-bot-num .dp-sub {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    color: #333333 !important;
+  }
+
+  /* 6. 교탁 영역 (전면 기준점 명확화 & 불필요한 설명/아이콘 배제) */
+  #podiumArea {
+    margin-top: 6px !important;
+    padding-top: 0 !important;
+    display: flex !important;
+    justify-content: center !important;
+    width: 100% !important;
+  }
+  #teacherDesk {
+    background: #f8fafc !important;
+    border: 2px solid #000000 !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border-radius: 6px !important;
+    padding: 6px 40px !important;
+    height: 36px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  #teacherDesk .desk-icon,
+  #teacherDesk .desk-sub,
+  #teacherDesk .desk-edit-hint {
+    display: none !important;
+  }
+  #teacherClassName {
+    font-size: 16px !important;
+    font-weight: 800 !important;
+    color: #000000 !important;
+  }
+
+  /* 7. 우측 학생 출석 명렬표 (페이지 높이에 맞춰 균등 행 분배) */
   body.print-hide-roster #rosterSidebar {
     display: none !important;
   }
+
   body:not(.print-hide-roster) #rosterSidebar {
     display: flex !important;
-    width: 200px !important;
-    background: transparent !important;
-    border-left: 1px solid #ccc !important;
+    flex-direction: column !important;
+    width: 250px !important;
+    min-width: 240px !important;
+    max-width: 280px !important;
+    height: 100% !important;
+    max-height: 100vh !important;
+    background: #ffffff !important;
+    border: 2px solid #000000 !important;
+    border-radius: 6px !important;
+    padding: 8px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    page-break-inside: avoid !important;
   }
-  body:not(.print-hide-roster) .roster-header button,
+
+  body:not(.print-hide-roster) .roster-header {
+    height: 28px !important;
+    min-height: 28px !important;
+    border-bottom: 2px solid #000000 !important;
+    padding: 0 4px 4px 4px !important;
+    margin-bottom: 6px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  body:not(.print-hide-roster) .roster-title-group h3 {
+    font-size: 14px !important;
+    font-weight: 900 !important;
+    color: #000000 !important;
+  }
+
+  body:not(.print-hide-roster) .sub-hint,
+  body:not(.print-hide-roster) #btnCloseRoster,
   body:not(.print-hide-roster) .roster-config-bar,
   body:not(.print-hide-roster) .roster-actions,
   body:not(.print-hide-roster) .student-del-btn,
-  body:not(.print-hide-roster) .roster-footer button {
+  body:not(.print-hide-roster) .student-assigned-badge,
+  body:not(.print-hide-roster) .roster-footer {
     display: none !important;
   }
-  body:not(.print-hide-roster) .roster-student-item {
-    background: transparent !important;
-    border-bottom: 1px solid #eee !important;
-    color: #000 !important;
+
+  /* 명렬표 리스트 컨테이너: 2개 열 세로 흐름 & 행 높이 100% 균등 분할 */
+  body:not(.print-hide-roster) #rosterListContainer {
+    flex: 1 !important;
+    height: calc(100% - 36px) !important;
+    max-height: calc(100% - 36px) !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    grid-auto-flow: column !important;
+    grid-auto-rows: 1fr !important;
+    gap: 3px 5px !important;
+    overflow: hidden !important;
+    padding: 0 !important;
   }
+
+  body:not(.print-hide-roster) .roster-student-item {
+    border: 1px solid #4b5563 !important;
+    background: #ffffff !important;
+    border-radius: 4px !important;
+    padding: 2px 6px !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 6px !important;
+    box-shadow: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  body:not(.print-hide-roster) .student-no-pill {
+    background: #000000 !important;
+    color: #ffffff !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    padding: 1px 4px !important;
+    border-radius: 3px !important;
+    min-width: 22px !important;
+    text-align: center !important;
+    flex-shrink: 0 !important;
+  }
+
   body:not(.print-hide-roster) .student-name-input {
-    color: #000 !important;
+    border: none !important;
+    background: transparent !important;
+    color: #000000 !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    padding: 0 !important;
+    pointer-events: none !important;
+    width: 100% !important;
   }
 }

@@ -420,11 +420,48 @@ function createDeskCardElement(zone, row, desk, maxDesks) {
 
   card.appendChild(topBar);
 
-  // 학생 이름 라벨
+  // 학생 이름 라벨 (화면 표시용)
   const nameLabel = document.createElement('div');
   nameLabel.className = `desk-name ${hasStudent ? '' : 'empty'}`;
   nameLabel.textContent = hasStudent ? desk.studentName : '빈자리';
   card.appendChild(nameLabel);
+
+  // [인쇄 전용 뷰 컨테이너] 사용자 선택 4종 포맷(이름(번호), 번호 이름, 위-번호 아래-이름, 위-이름 아래-번호) 대응
+  const printView = document.createElement('div');
+  printView.className = 'desk-print-view';
+
+  const pNum = desk.studentNo ? String(desk.studentNo) : '';
+  const pName = hasStudent ? desk.studentName : '';
+
+  // 1. 이름(번호) - 예: 김민준(1)
+  const pBracket = document.createElement('div');
+  pBracket.className = 'dp-item dp-format-bracket';
+  pBracket.textContent = hasStudent ? (pNum ? `${pName}(${pNum})` : pName) : '';
+
+  // 2. 번호 이름 - 예: 1 김민준
+  const pNumName = document.createElement('div');
+  pNumName.className = 'dp-item dp-format-num-name';
+  pNumName.textContent = hasStudent ? (pNum ? `${pNum} ${pName}` : pName) : '';
+
+  // 3. 위-번호 아래-이름
+  const pTopNumBotName = document.createElement('div');
+  pTopNumBotName.className = 'dp-item dp-format-top-num-bot-name';
+  if (hasStudent) {
+    pTopNumBotName.innerHTML = `<span class="dp-sub">${pNum}</span><span class="dp-main">${pName}</span>`;
+  }
+
+  // 4. 위-이름 아래-번호
+  const pTopNameBotNum = document.createElement('div');
+  pTopNameBotNum.className = 'dp-item dp-format-top-name-bot-num';
+  if (hasStudent) {
+    pTopNameBotNum.innerHTML = `<span class="dp-main">${pName}</span><span class="dp-sub">${pNum}</span>`;
+  }
+
+  printView.appendChild(pBracket);
+  printView.appendChild(pNumName);
+  printView.appendChild(pTopNumBotName);
+  printView.appendChild(pTopNameBotNum);
+  card.appendChild(printView);
 
   // [조절 모드 전용] 책상 하단 '반 칸(0.5칸) 이동' 버튼 바
   if (appState.isEditMode) {
@@ -1047,7 +1084,7 @@ function initEventListeners() {
     }
   };
 
-  // 11. A4 인쇄 모달 (명렬표 포함 여부 선택)
+  // 11. A4 가로 인쇄 모달 (표기 양식 4종 & 명렬표 우측 균등 분배)
   const printModal = document.getElementById('printOptionModal');
   document.getElementById('btnPrintModalOpen').onclick = () => {
     printModal.classList.remove('hidden');
@@ -1059,13 +1096,35 @@ function initEventListeners() {
     printModal.classList.add('hidden');
   };
   document.getElementById('btnExecutePrint').onclick = () => {
+    const selectedFormat = document.querySelector('input[name="printDeskFormat"]:checked')?.value || 'name-num-bracket';
     const withRoster = document.getElementById('chkPrintWithRoster').checked;
-    if (withRoster) {
+    const tab = getActiveTab();
+    const rosterListContainer = document.getElementById('rosterListContainer');
+
+    // 1. 선택된 학생 표기 양식 data 속성 바인딩
+    document.body.dataset.printFormat = selectedFormat;
+
+    // 2. 명렬표 포함 여부 및 높이 100% 균등 분배 행 계산
+    if (withRoster && tab && tab.roster && tab.roster.length > 0) {
       document.body.classList.remove('print-hide-roster');
+      const half = Math.max(1, Math.ceil(tab.roster.length / 2));
+      rosterListContainer.style.setProperty('--print-roster-rows', String(half));
+      rosterListContainer.style.gridTemplateRows = `repeat(${half}, 1fr)`;
     } else {
       document.body.classList.add('print-hide-roster');
+      rosterListContainer.style.gridTemplateRows = '';
     }
+
     printModal.classList.add('hidden');
+
+    // 3. 인쇄 완료 후 인라인 스타일 복원 이벤트 등록
+    const handleAfterPrint = () => {
+      rosterListContainer.style.gridTemplateRows = '';
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+
+    // 4. 브라우저 인쇄 다이얼로그 호출
     window.print();
   };
 
