@@ -1,45 +1,170 @@
+* {
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 body {
   margin: 0;
-  background: #0f172a;
-  color: #fff;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #0f172a;
+  color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", Roboto, sans-serif;
   overflow: hidden;
+  transition: background-color 0.2s ease;
+}
+
+body.grid-bg {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.22) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+#canvas-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  touch-action: none;
+}
+
+#staticCanvas {
+  z-index: 1;
+  pointer-events: none;
+}
+
+#activeCanvas {
+  z-index: 2;
+  cursor: crosshair;
 }
 
 #toolbar {
   position: fixed;
-  top: 16px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(30, 41, 59, 0.85);
-  backdrop-filter: blur(8px);
-  padding: 6px 14px;
-  border-radius: 20px;
-  display: flex;
-  gap: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(12px);
   border: 1px solid #334155;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  z-index: 10;
+  padding: 8px 16px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  z-index: 50;
+  max-width: 96vw;
+  overflow-x: auto;
 }
 
-button {
+.tool-group,
+.color-group,
+.width-group,
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.divider {
+  width: 1px;
+  height: 22px;
   background: #334155;
-  color: #fff;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 12px;
-  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.tool-btn {
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.15s ease;
 }
 
-button:hover, button.active {
-  background: #2563eb;
-  transform: scale(1.05);
+.tool-btn:hover:not(:disabled) {
+  background: #334155;
 }
 
-canvas {
+.tool-btn.active {
+  background: #2563eb;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.tool-btn.primary {
+  background: #0284c7;
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.tool-btn.danger:hover {
+  background: #dc2626;
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+.tool-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.color-swatch.active {
+  transform: scale(1.2);
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35);
+}
+
+.width-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #1e293b;
+  border: 1px solid #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.width-btn.active {
+  background: #2563eb;
+  border-color: #60a5fa;
+}
+
+.width-btn .dot {
+  background: #ffffff;
+  border-radius: 50%;
   display: block;
-  touch-action: none;
-  cursor: crosshair;
+}
+
+.device-badge {
+  font-size: 11px;
+  font-weight: 800;
+  color: #38bdf8;
+  padding: 2px 8px;
+  background: rgba(56, 189, 248, 0.12);
+  border-radius: 999px;
 }

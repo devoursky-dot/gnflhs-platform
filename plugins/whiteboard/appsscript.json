@@ -1,0 +1,26 @@
+{
+  "timeZone": "Asia/Seoul",
+  "runtimeVersion": "GNFLHS_V2",
+  "exceptionLogging": "STACKDRIVER",
+  "webapp": {
+    "executeAs": "USER_ACCESSING",
+    "access": "DOMAIN"
+  },
+  "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "FirestoreDB",
+        "serviceId": "firestore",
+        "version": "v1"
+      }
+    ],
+    "libraries": [
+      {
+        "userSymbol": "ResponsiveUI",
+        "libraryId": "gnflhs-responsive-ui",
+        "version": "HEAD",
+        "developmentMode": true
+      }
+    ]
+  }
+}

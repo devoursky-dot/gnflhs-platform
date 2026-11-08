@@ -10,7 +10,7 @@ interface PluginManagerModalProps {
   onCopyToStudio?: (plugin: AppPlugin) => void;
 }
 
-const CORE_SYSTEM_IDS = ['whiteboard', 'account-manager', 'dormitory-penalty'];
+const CORE_SYSTEM_IDS = ['account-manager'];
 
 export const PluginManagerModal: React.FC<PluginManagerModalProps> = ({
   isOpen,

@@ -2,18 +2,61 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>GNFLHS 전자칠판 초경량 판서</title>
+  <title>전자칠판 필기 노트</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="toolbar">
-    <button id="btnPen" class="active" title="필기 펜">✏️</button>
-    <button id="btnRed" title="빨간색">🔴</button>
-    <button id="btnYellow" title="노란색">🟡</button>
-    <button id="btnEraser" title="지우개">🧹</button>
-    <button id="btnClear" title="모두 지우기">🗑️</button>
+  <div id="canvas-stage">
+    <canvas id="staticCanvas"></canvas>
+    <canvas id="activeCanvas"></canvas>
   </div>
-  <canvas id="canvas"></canvas>
+
+  <!-- 하단 플로팅 필기 툴바 (삼성노트 REA 필압 & 손떨림 보정 벡터 엔진) -->
+  <div id="toolbar">
+    <div class="tool-group">
+      <button id="btnToolPen" class="tool-btn active" title="필기펜 (REA 필압/손떨림 보정)">✏️ 펜</button>
+      <button id="btnToolHighlighter" class="tool-btn" title="형광펜">🖍️ 형광</button>
+      <button id="btnToolEraser" class="tool-btn" title="지우개">🧹 지우개</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- 색상 팔레트 -->
+    <div id="colorPalette" class="color-group">
+      <button class="color-swatch active" data-color="#FFFFFF" style="background:#FFFFFF;" title="흰색 (칠판 기본)"></button>
+      <button class="color-swatch" data-color="#FACC15" style="background:#FACC15;" title="노란색"></button>
+      <button class="color-swatch" data-color="#EF4444" style="background:#EF4444;" title="빨간색"></button>
+      <button class="color-swatch" data-color="#38BDF8" style="background:#38BDF8;" title="하늘색"></button>
+      <button class="color-swatch" data-color="#4ADE80" style="background:#4ADE80;" title="초록색"></button>
+      <button class="color-swatch" data-color="#FB923C" style="background:#FB923C;" title="주황색" data-tier="detail"></button>
+      <button class="color-swatch" data-color="#C084FC" style="background:#C084FC;" title="보라색" data-tier="detail"></button>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- 굵기 선택 -->
+    <div class="width-group">
+      <button class="width-btn" data-width="3" title="가는 선 (3px)"><span class="dot" style="width:4px;height:4px;"></span></button>
+      <button class="width-btn active" data-width="6" title="보통 선 (6px)"><span class="dot" style="width:7px;height:7px;"></span></button>
+      <button class="width-btn" data-width="10" title="굵은 선 (10px)"><span class="dot" style="width:10px;height:10px;"></span></button>
+      <button class="width-btn" data-width="16" title="매우 굵은 선 (16px)" data-tier="detail"><span class="dot" style="width:13px;height:13px;"></span></button>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- 액션 버튼 (실행취소 / 다시실행 / 배경모눈 / 전체지우기 / PNG 저장) -->
+    <div class="action-group">
+      <button id="btnUndo" class="tool-btn" title="실행 취소 (Ctrl+Z)" disabled>↩️</button>
+      <button id="btnRedo" class="tool-btn" title="다시 실행 (Ctrl+Y)" disabled>↪️</button>
+      <button id="btnGrid" class="tool-btn" title="모눈 칠판 배경 토글" data-tier="pc-only">📐 모눈</button>
+      <button id="btnBoardTheme" class="tool-btn" title="칠판 배경색 전환 (다크/그린/화이트)" data-tier="detail">🎨 칠판</button>
+      <button id="btnClear" class="tool-btn danger" title="전체 지우기">🗑️ 지우기</button>
+      <button id="btnSave" class="tool-btn primary" title="판서 이미지(PNG) 저장">💾 저장</button>
+    </div>
+
+    <span id="deviceBadge" class="device-badge" data-tier="detail"></span>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>

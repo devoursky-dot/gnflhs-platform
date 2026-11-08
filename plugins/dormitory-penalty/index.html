@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>기숙사 상·벌점 관리 시스템</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="dorm-shell">
+    <!-- 상단 헤더 바 -->
+    <header class="dorm-header">
+      <div class="header-left">
+        <div class="logo-box">🛡️</div>
+        <div>
+          <h1 id="appTitle">기숙사 상·벌점 관리 시스템</h1>
+          <div id="schoolBadge" class="sub-badge">경남외국어고등학교 · 생활관 통합 관리</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="btnOpenAddModal" class="btn-primary">+ 상·벌점 부여하기</button>
+      </div>
+    </header>
+
+    <div class="dorm-body">
+      <!-- 좌측 층별/유형별 필터 사이드바 -->
+      <aside class="dorm-sidebar" data-tier="sidebar">
+        <div class="filter-section">
+          <div class="filter-title">생활관 층별 필터</div>
+          <div id="floorFilterGroup" class="filter-list">
+            <button class="filter-btn active" data-floor="all">전체 호실</button>
+            <button class="filter-btn" data-floor="2">2층 생활관 (201~220호)</button>
+            <button class="filter-btn" data-floor="3">3층 생활관 (301~320호)</button>
+            <button class="filter-btn" data-floor="4">4층 생활관 (401~420호)</button>
+          </div>
+        </div>
+
+        <div class="filter-section" style="margin-top:20px;">
+          <div class="filter-title">구분 필터</div>
+          <div id="typeFilterGroup" class="filter-list">
+            <button class="filter-btn active" data-type="all">전체 내역</button>
+            <button class="filter-btn" data-type="merit">🟢 상점 부여 내역</button>
+            <button class="filter-btn" data-type="demerit">🔴 벌점 부여 내역</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 메인 대시보드 영역 -->
+      <main class="dorm-main">
+        <!-- 요약 통계 카드 -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">조회된 기록 건수</div>
+            <div id="statTotalCount" class="stat-value">0건</div>
+          </div>
+          <div class="stat-card merit">
+            <div class="stat-label">누적 상점 합계 (건수)</div>
+            <div id="statMeritSum" class="stat-value">0점</div>
+          </div>
+          <div class="stat-card demerit">
+            <div class="stat-label">누적 벌점 합계 (건수)</div>
+            <div id="statDemeritSum" class="stat-value">0점</div>
+          </div>
+        </div>
+
+        <!-- 검색 바 -->
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input
+            type="text"
+            id="searchInput"
+            placeholder="학생 이름, 학번(예: 10101), 호실(예: 301호) 또는 사유로 실시간 검색..."
+          />
+          <button id="btnClearSearch" class="btn-ghost" style="display:none;">초기화</button>
+        </div>
+
+        <!-- 상벌점 기록 테이블 -->
+        <div class="table-card">
+          <table class="dorm-table">
+            <thead>
+              <tr>
+                <th>일자</th>
+                <th>학번</th>
+                <th>이름</th>
+                <th>호실</th>
+                <th>구분 / 점수</th>
+                <th>상세 사유</th>
+                <th data-tier="detail">담당 사감</th>
+                <th style="text-align:right;">관리</th>
+              </tr>
+            </thead>
+            <tbody id="recordsTableBody"></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- 신규 상·벌점 부여 모달 -->
+  <div id="addModalOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>신규 상·벌점 부여</h3>
+        <button id="btnCloseAddModal" class="btn-icon">✕</button>
+      </div>
+      <form id="addRecordForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label>학번</label>
+            <input type="text" id="inputStudentId" placeholder="예: 10101" required />
+          </div>
+          <div class="form-group">
+            <label>학생 이름</label>
+            <input type="text" id="inputStudentName" placeholder="예: 홍길동" required />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>기숙사 호실</label>
+            <input type="text" id="inputRoom" placeholder="예: 301호" required />
+          </div>
+          <div class="form-group">
+            <label>상·벌점 구분 및 점수</label>
+            <select id="inputPoints">
+              <option value="1">🔴 벌점 +1점 (경미 위반)</option>
+              <option value="2">🔴 벌점 +2점 (일반 위반)</option>
+              <option value="3">🔴 벌점 +3점 (중대 위반)</option>
+              <option value="5">🔴 벌점 +5점 (특별 지도)</option>
+              <option value="-1">🟢 상점 1점 (모범/봉사)</option>
+              <option value="-2">🟢 상점 2점 (우수 호실 표창)</option>
+              <option value="-3">🟢 상점 3점 (특별 선행)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>상세 부여 사유</label>
+          <input type="text" id="inputReason" placeholder="예: 점호 시간 정리정돈 우수 / 소등 후 전자기기 사용" required />
+        </div>
+
+        <div class="form-group" style="margin-bottom:20px;">
+          <label>담당 사감 교사명</label>
+          <input type="text" id="inputSupervisor" value="사감교사" required />
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="btnCancelAddModal" class="btn-secondary">취소</button>
+          <button type="submit" class="btn-primary">등록 완료</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
