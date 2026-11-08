@@ -38,5 +38,21 @@ service cloud.firestore {
     match /storage_meta/{docId} {
       allow read, write: if isAuthenticated();
     }
+
+    // 스튜디오 미배포 프로젝트 보관함 (최고관리자 전용)
+    match /studio_projects/{projectId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    // 플랫폼 전역 공유 스크립트 속성
+    match /platform_settings/{docId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // 플러그인 공용 DB 브릿지 (GNFLHS.db)
+    match /plugin_data/{pluginId}/items/{itemId} {
+      allow read, write: if isAuthenticated();
+    }
   }
 }

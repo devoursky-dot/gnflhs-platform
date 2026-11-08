@@ -1,6 +1,7 @@
 import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@gnflhs/shared-auth';
-import { AppPlugin, PluginDeployment, VirtualFile } from '@gnflhs/shared-types';
+import { AppPlugin, PluginDeployment, StudioProject, UserRole, VirtualFile } from '@gnflhs/shared-types';
+import { compileStudioBundle } from './studioCompiler';
 
 const PLUGINS_COLLECTION = 'plugins';
 
@@ -197,4 +198,244 @@ export async function seedDefaultPlugins(): Promise<void> {
     const docRef = doc(db, PLUGINS_COLLECTION, p.id);
     await setDoc(docRef, p, { merge: true });
   }
+}
+
+/**
+ * 스튜디오 프로젝트를 새로운 정식 운영 앱으로 신규 배포
+ */
+export async function publishStudioProjectAsNewApp(
+  project: StudioProject,
+  meta: {
+    appId: string;
+    name: string;
+    description: string;
+    icon: string;
+    category: 'classroom' | 'management' | 'utility';
+    version: string;
+    note: string;
+    allowedRoles?: UserRole[];
+  },
+  globalProperties: Record<string, string> = {}
+): Promise<AppPlugin> {
+  const now = Date.now();
+  const appId = meta.appId.toLowerCase().trim().replace(/[^a-z0-9-_]/g, '-');
+  const deploymentId = `dep-${now.toString(36)}`;
+
+  const compiledHtml = compileStudioBundle({
+    projectId: appId,
+    projectName: meta.name.trim(),
+    files: project.files,
+    scriptProperties: project.scriptProperties,
+    globalProperties,
+    libraries: project.libraries,
+    runtimeConfig: project.runtimeConfig,
+    forcedDevice: 'auto'
+  });
+
+  const initialDeployment: PluginDeployment = {
+    deploymentId,
+    version: meta.version.trim() || '1.0.0',
+    deployedAt: now,
+    note: meta.note.trim() || '신규 정식 배포',
+    files: project.files.map((f) => ({ ...f })),
+    scriptProperties: { ...project.scriptProperties },
+    libraries: project.libraries.map((l) => ({ ...l })),
+    runtimeConfig: { ...project.runtimeConfig },
+    codeType: 'inline_html',
+    entryUrl: `/plugin/${appId}`
+  };
+
+  const newApp: AppPlugin = {
+    id: appId,
+    name: meta.name.trim(),
+    description: meta.description.trim() || project.description,
+    icon: meta.icon || project.icon || 'Puzzle',
+    category: meta.category || project.category || 'utility',
+    version: initialDeployment.version,
+    status: 'production',
+    entryUrl: `/plugin/${appId}`,
+    allowedRoles: meta.allowedRoles || ['super_admin', 'admin', 'teacher', 'student'],
+    codeType: 'inline_html',
+    customCode: compiledHtml,
+    files: project.files.map((f) => ({ ...f })),
+    scriptProperties: { ...project.scriptProperties },
+    libraries: project.libraries.map((l) => ({ ...l })),
+    runtimeConfig: { ...project.runtimeConfig },
+    activeDeploymentId: deploymentId,
+    sourceStudioProjectId: project.id,
+    deployments: [initialDeployment],
+    updatedAt: now
+  };
+
+  await setDoc(doc(db, PLUGINS_COLLECTION, appId), newApp);
+  return newApp;
+}
+
+/**
+ * 스튜디오 프로젝트를 기존 구동중인 앱의 새 배포본으로 등록 및 즉시 업그레이드 교체 (이전 상태 완벽 보존)
+ */
+export async function upgradeAppWithStudioProject(
+  project: StudioProject,
+  targetApp: AppPlugin,
+  version: string,
+  note: string,
+  globalProperties: Record<string, string> = {}
+): Promise<AppPlugin> {
+  const now = Date.now();
+  const targetRef = doc(db, PLUGINS_COLLECTION, targetApp.id);
+  const existingSnap = await getDoc(targetRef);
+  const baseApp: AppPlugin = existingSnap.exists() ? (existingSnap.data() as AppPlugin) : targetApp;
+
+  const history: PluginDeployment[] = [...(baseApp.deployments || [])];
+
+  // 기존 운영 앱에 스냅샷 기록이 없다면 최초 원본(정적 빌드 URL 등)을 v1.0.0 기준점으로 자동 보존
+  if (history.length === 0) {
+    history.push({
+      deploymentId: `dep-origin-${baseApp.id}`,
+      version: baseApp.version || '1.0.0',
+      deployedAt: baseApp.updatedAt || now - 1000,
+      note: baseApp.codeType === 'inline_html' ? '초기 운영 배포본' : '정적 빌드 원본',
+      files: baseApp.files || [],
+      scriptProperties: baseApp.scriptProperties || {},
+      libraries: baseApp.libraries || [],
+      runtimeConfig: baseApp.runtimeConfig,
+      codeType: baseApp.codeType || 'url',
+      entryUrl: baseApp.entryUrl
+    });
+  }
+
+  const newDeploymentId = `dep-${now.toString(36)}`;
+  const cleanVersion = version.trim() || `1.${history.length}.0`;
+
+  const compiledHtml = compileStudioBundle({
+    projectId: baseApp.id,
+    projectName: baseApp.name,
+    files: project.files,
+    scriptProperties: project.scriptProperties,
+    globalProperties,
+    libraries: project.libraries,
+    runtimeConfig: project.runtimeConfig,
+    forcedDevice: 'auto'
+  });
+
+  const newDeployment: PluginDeployment = {
+    deploymentId: newDeploymentId,
+    version: cleanVersion,
+    deployedAt: now,
+    note: note.trim() || `${project.name} 기반 업그레이드`,
+    files: project.files.map((f) => ({ ...f })),
+    scriptProperties: { ...project.scriptProperties },
+    libraries: project.libraries.map((l) => ({ ...l })),
+    runtimeConfig: { ...project.runtimeConfig },
+    codeType: 'inline_html',
+    entryUrl: baseApp.entryUrl
+  };
+
+  const nextDeployments = [newDeployment, ...history].slice(0, 25);
+
+  const upgraded: AppPlugin = {
+    ...baseApp,
+    version: cleanVersion,
+    status: 'production',
+    codeType: 'inline_html',
+    customCode: compiledHtml,
+    files: project.files.map((f) => ({ ...f })),
+    scriptProperties: { ...project.scriptProperties },
+    libraries: project.libraries.map((l) => ({ ...l })),
+    runtimeConfig: { ...project.runtimeConfig },
+    activeDeploymentId: newDeploymentId,
+    sourceStudioProjectId: project.id,
+    deployments: nextDeployments,
+    updatedAt: now
+  };
+
+  await setDoc(targetRef, upgraded, { merge: true });
+  return upgraded;
+}
+
+/**
+ * 배포본 관리: 특정 배포 스냅샷 버전으로 즉시 전환 / 롤백 복원 (정적 빌드 원본 포함 완벽 복원)
+ */
+export async function activateDeploymentSnapshot(
+  plugin: AppPlugin,
+  deployment: PluginDeployment,
+  globalProperties: Record<string, string> = {}
+): Promise<void> {
+  const targetRef = doc(db, PLUGINS_COLLECTION, plugin.id);
+
+  if (deployment.codeType === 'url') {
+    await setDoc(
+      targetRef,
+      {
+        version: deployment.version,
+        codeType: 'url',
+        customCode: '',
+        entryUrl: deployment.entryUrl || plugin.entryUrl,
+        activeDeploymentId: deployment.deploymentId || `dep-${deployment.version}`,
+        updatedAt: Date.now()
+      },
+      { merge: true }
+    );
+    return;
+  }
+
+  const compiledHtml = compileStudioBundle({
+    projectId: plugin.id,
+    projectName: plugin.name,
+    files: deployment.files || [],
+    scriptProperties: deployment.scriptProperties || {},
+    globalProperties,
+    libraries: deployment.libraries,
+    runtimeConfig: deployment.runtimeConfig,
+    forcedDevice: 'auto'
+  });
+
+  await setDoc(
+    targetRef,
+    {
+      version: deployment.version,
+      codeType: 'inline_html',
+      customCode: compiledHtml,
+      files: deployment.files || [],
+      scriptProperties: deployment.scriptProperties || {},
+      libraries: deployment.libraries || [],
+      runtimeConfig: deployment.runtimeConfig || plugin.runtimeConfig,
+      activeDeploymentId: deployment.deploymentId || `dep-${deployment.version}`,
+      updatedAt: Date.now()
+    },
+    { merge: true }
+  );
+}
+
+/**
+ * 배포본 관리: 배포 메모 수정
+ */
+export async function updateDeploymentMetadata(
+  plugin: AppPlugin,
+  targetDep: PluginDeployment,
+  newNote: string
+): Promise<void> {
+  const list = (plugin.deployments || []).map((d) => {
+    const match =
+      (d.deploymentId && d.deploymentId === targetDep.deploymentId) ||
+      (d.version === targetDep.version && d.deployedAt === targetDep.deployedAt);
+    return match ? { ...d, note: newNote.trim() } : d;
+  });
+  await setDoc(doc(db, PLUGINS_COLLECTION, plugin.id), { deployments: list, updatedAt: Date.now() }, { merge: true });
+}
+
+/**
+ * 배포본 관리: 보관된 배포 스냅샷 삭제
+ */
+export async function removeDeploymentSnapshot(
+  plugin: AppPlugin,
+  targetDep: PluginDeployment
+): Promise<void> {
+  const list = (plugin.deployments || []).filter((d) => {
+    if (d.deploymentId && targetDep.deploymentId) {
+      return d.deploymentId !== targetDep.deploymentId;
+    }
+    return !(d.version === targetDep.version && d.deployedAt === targetDep.deployedAt);
+  });
+  await setDoc(doc(db, PLUGINS_COLLECTION, plugin.id), { deployments: list, updatedAt: Date.now() }, { merge: true });
 }

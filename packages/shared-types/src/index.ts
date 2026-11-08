@@ -16,15 +16,38 @@ export interface UserAccount {
 export type PluginStatus = 'production' | 'development' | 'disabled';
 
 export interface VirtualFile {
-  name: string; // 예: index.html, script.js, style.css
+  name: string; // 예: index.html, script.js, style.css, appsscript.json
   content: string;
 }
 
+export interface StudioLibraryBinding {
+  libraryId: string; // 예: gnflhs-core-sdk, gnflhs-ui-kit, gnflhs-storage-bridge, gnflhs-icons-mini
+  version: string; // 'HEAD' | '1.0.0'
+  enabled: boolean;
+  identifier?: string; // 전역 식별자 별칭
+}
+
+export type DeviceViewportType = 'pc' | 'tablet' | 'mobile';
+
+export interface StudioRuntimeConfig {
+  runtimeVersion: 'V8';
+  timeZone: string;
+  showManifest: boolean;
+  cacheEnabled: boolean;
+  cacheTtlSec: number;
+}
+
 export interface PluginDeployment {
+  deploymentId?: string;
   version: string;
   deployedAt: number;
   note?: string;
   files: VirtualFile[];
+  scriptProperties?: Record<string, string>;
+  libraries?: StudioLibraryBinding[];
+  runtimeConfig?: StudioRuntimeConfig;
+  codeType?: 'url' | 'inline_html';
+  entryUrl?: string;
 }
 
 export interface AppPlugin {
@@ -40,7 +63,29 @@ export interface AppPlugin {
   codeType?: 'url' | 'inline_html'; // 'url': 정적 빌드 배포본, 'inline_html': 플랫폼 내 직접 입력한 핫스왑 코드
   customCode?: string; // 실시간 핫스왑 소스코드 (HTML/JS/CSS 통합)
   files?: VirtualFile[]; // 멀티 파일 시스템
+  scriptProperties?: Record<string, string>; // 스크립트 속성 (환경변수 & 반응형 정책)
+  libraries?: StudioLibraryBinding[]; // 연결된 공유 라이브러리
+  runtimeConfig?: StudioRuntimeConfig; // 실행 환경 및 캐시 설정
+  activeDeploymentId?: string; // 현재 활성화된 배포 스냅샷 ID
+  sourceStudioProjectId?: string; // 원본 스튜디오 프로젝트 ID
   deployments?: PluginDeployment[]; // 버전 스냅샷 히스토리
+  updatedAt: number;
+}
+
+export interface StudioProject {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: 'classroom' | 'management' | 'utility';
+  sourcePluginId?: string; // 운영 앱에서 복사해온 경우 원본 앱 ID
+  publishedPluginId?: string; // 신규 정식 앱으로 배포한 경우 연결된 앱 ID
+  files: VirtualFile[];
+  scriptProperties: Record<string, string>;
+  libraries: StudioLibraryBinding[];
+  services: string[]; // 활성화된 플랫폼 내장 서비스 ID 목록
+  runtimeConfig: StudioRuntimeConfig;
+  createdAt: number;
   updatedAt: number;
 }
 

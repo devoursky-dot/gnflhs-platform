@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
 import { AppPlugin, PluginStatus } from '@gnflhs/shared-types';
-import { updatePlugin, seedDefaultPlugins } from '../services/pluginService';
-import { Puzzle, X, Plus, ToggleLeft, ToggleRight, Sparkles, RefreshCw } from 'lucide-react';
+import { updatePlugin, seedDefaultPlugins, deletePlugin } from '../services/pluginService';
+import { Puzzle, X, Plus, RefreshCw, Copy, Trash2 } from 'lucide-react';
 
 interface PluginManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
   plugins: AppPlugin[];
+  onCopyToStudio?: (plugin: AppPlugin) => void;
 }
+
+const CORE_SYSTEM_IDS = ['whiteboard', 'account-manager', 'dormitory-penalty'];
 
 export const PluginManagerModal: React.FC<PluginManagerModalProps> = ({
   isOpen,
   onClose,
-  plugins
+  plugins,
+  onCopyToStudio
 }) => {
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [newId, setNewId] = useState('');
@@ -138,26 +142,77 @@ export const PluginManagerModal: React.FC<PluginManagerModalProps> = ({
                 <code style={{ fontSize: '11px', color: '#3b82f6' }}>경로: {p.entryUrl}</code>
               </div>
 
-              {/* 상태 토글 버튼 */}
-              <button
-                onClick={() => handleToggleStatus(p)}
-                title="상태 전환 (정식 운영 ➔ 개발 테스트 ➔ 비활성화)"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  backgroundColor: '#fff',
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer'
-                }}
-              >
-                <RefreshCw size={12} color="#64748b" />
-                <span>상태 전환</span>
-              </button>
+              {/* 액션 버튼 그룹 (복사 / 상태 전환 / 커스텀 앱 삭제) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {onCopyToStudio && (
+                  <button
+                    onClick={() => {
+                      onCopyToStudio(p);
+                      onClose();
+                    }}
+                    title="스튜디오 프로젝트로 복사하여 안전하게 편집"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '6px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid #bfdbfe',
+                      backgroundColor: '#eff6ff',
+                      color: '#2563eb',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Copy size={13} />
+                    <span>복사</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => handleToggleStatus(p)}
+                  title="상태 전환 (정식 운영 ➔ 개발 테스트 ➔ 비활성화)"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#fff',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <RefreshCw size={12} color="#64748b" />
+                  <span>상태</span>
+                </button>
+
+                {!CORE_SYSTEM_IDS.includes(p.id) && (
+                  <button
+                    onClick={async () => {
+                      if (confirm(`'${p.name}' 앱을 목록에서 삭제하시겠습니까?`)) {
+                        await deletePlugin(p.id);
+                      }
+                    }}
+                    title="커스텀 앱 삭제"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '7px',
+                      borderRadius: '8px',
+                      border: '1px solid #fecaca',
+                      backgroundColor: '#fef2f2',
+                      color: '#dc2626',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

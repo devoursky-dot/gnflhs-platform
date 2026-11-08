@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, loginWithGoogle, logout, isSuperAdmin, SUPER_ADMIN_EMAIL, checkRedirectResult } from '@gnflhs/shared-auth';
-import { AppPlugin } from '@gnflhs/shared-types';
+import { AppPlugin, DeviceViewportType, StudioProject } from '@gnflhs/shared-types';
 import { subscribePlugins } from './services/pluginService';
+import {
+  cloneAppToStudioProject,
+  subscribeGlobalProperties,
+  subscribeStudioProjects
+} from './services/studioService';
 import { PluginManagerModal } from './components/PluginManagerModal';
 import { PluginDevStudioModal } from './components/PluginDevStudioModal';
 import { DynamicRunnerModal } from './components/DynamicRunnerModal';
 import { StorageExplorerModal } from './components/StorageExplorerModal';
+import { TestDeploymentRunner } from './components/TestDeploymentRunner';
 import {
   LayoutGrid,
   LogIn,
@@ -24,17 +30,27 @@ import {
   HardDrive,
   SlidersHorizontal,
   Eye,
-  EyeOff
+  EyeOff,
+  Copy
 } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [plugins, setPlugins] = useState<AppPlugin[]>([]);
+  const [studioProjects, setStudioProjects] = useState<StudioProject[]>([]);
+  const [globalProperties, setGlobalProperties] = useState<Record<string, string>>({});
+  const [studioInitialProjectId, setStudioInitialProjectId] = useState<string | null>(null);
   const [devModeActive, setDevModeActive] = useState<boolean>(true); // 개발자 모드 기본 ON
   const [isManagerOpen, setIsManagerOpen] = useState(false);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [isStorageOpen, setIsStorageOpen] = useState(false);
   const [activeDynamicPlugin, setActiveDynamicPlugin] = useState<AppPlugin | null>(null);
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const testRunnerProjectId = urlParams.get('testRunner');
+  const rawDevice = urlParams.get('device');
+  const testRunnerDevice: DeviceViewportType =
+    rawDevice === 'tablet' || rawDevice === 'mobile' ? rawDevice : 'pc';
 
   useEffect(() => {
     checkRedirectResult().catch(console.error);
@@ -44,11 +60,46 @@ export default function App() {
     const unsubPlugins = subscribePlugins((list) => {
       setPlugins(list);
     });
+    const unsubGlobal = subscribeGlobalProperties((gp) => {
+      setGlobalProperties(gp);
+    });
     return () => {
       unsubAuth();
       unsubPlugins();
+      unsubGlobal();
     };
   }, []);
+
+  const isAdmin = isSuperAdmin(currentUser);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const unsubStudio = subscribeStudioProjects((list) => {
+      setStudioProjects(list);
+    });
+    return () => unsubStudio();
+  }, [isAdmin]);
+
+  const handleCopyPluginToStudio = async (plugin: AppPlugin) => {
+    try {
+      const cloned = await cloneAppToStudioProject(plugin, `${plugin.name} (사본)`);
+      setStudioInitialProjectId(cloned.id);
+      setIsStudioOpen(true);
+    } catch (e: any) {
+      alert('사본 생성 오류: ' + (e?.message || e));
+    }
+  };
+
+  // 새 탭 테스트 실행 모드 (?testRunner=<projectId>&device=pc|tablet|mobile)
+  if (testRunnerProjectId) {
+    return (
+      <TestDeploymentRunner
+        projectId={testRunnerProjectId}
+        initialDevice={testRunnerDevice}
+        currentUser={currentUser}
+      />
+    );
+  }
 
   const handleLogin = async () => {
     try {
@@ -58,8 +109,6 @@ export default function App() {
       alert(`로그인 오류 (${error.code || 'unknown'}): ${error.message || error}`);
     }
   };
-
-  const isAdmin = isSuperAdmin(currentUser);
 
   // 일반 유저는 'production'만 보이고, 관리자는 devModeActive 시 'development'도 함께 노출
   const visiblePlugins = plugins.filter((p) => {
@@ -280,7 +329,7 @@ export default function App() {
             <div
               key={p.id}
               onClick={() => {
-                if (p.codeType === 'inline_html' && p.customCode) {
+                if (p.codeType === 'inline_html' && (p.customCode || p.files?.length)) {
                   setActiveDynamicPlugin(p);
                 } else {
                   window.location.href = p.entryUrl;
@@ -365,6 +414,28 @@ export default function App() {
                         v{p.version}
                       </span>
                     )}
+
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCopyPluginToStudio(p);
+                        }}
+                        title="이 운영 앱을 스튜디오 프로젝트로 복사하여 편집"
+                        style={{
+                          border: '1px solid #e2e8f0',
+                          backgroundColor: '#f8fafc',
+                          color: '#475569',
+                          padding: '5px',
+                          borderRadius: '7px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <Copy size={13} />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -401,13 +472,21 @@ export default function App() {
         isOpen={isManagerOpen}
         onClose={() => setIsManagerOpen(false)}
         plugins={plugins}
+        onCopyToStudio={handleCopyPluginToStudio}
       />
 
       {/* 실시간 코드 개발 스튜디오 모달 */}
       <PluginDevStudioModal
         isOpen={isStudioOpen}
-        onClose={() => setIsStudioOpen(false)}
+        onClose={() => {
+          setIsStudioOpen(false);
+          setStudioInitialProjectId(null);
+        }}
         plugins={plugins}
+        studioProjects={studioProjects}
+        globalProperties={globalProperties}
+        currentUser={currentUser}
+        initialProjectId={studioInitialProjectId}
       />
 
       {/* 클라우드 저장소 매니저 모달 */}
@@ -420,6 +499,8 @@ export default function App() {
       <DynamicRunnerModal
         plugin={activeDynamicPlugin}
         onClose={() => setActiveDynamicPlugin(null)}
+        currentUser={currentUser}
+        globalProperties={globalProperties}
       />
     </div>
   );
