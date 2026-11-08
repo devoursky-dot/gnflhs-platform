@@ -291,7 +291,7 @@ export const TestDeploymentRunner: React.FC<TestDeploymentRunnerProps> = ({
           transition: 'width 0.2s ease, height 0.2s ease'
         }}>
           <iframe
-            key={`${runKey}-${device}-${landscape}`}
+            key={`${runKey}-${device}-${landscape}-${project.updatedAt || 0}`}
             srcDoc={compiledSrc}
             title={project.name}
             sandbox={ENV.IFRAME_SANDBOX_FLAGS}

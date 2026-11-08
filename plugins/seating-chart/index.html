@@ -69,6 +69,19 @@
   <div id="workspace">
     <!-- 좌측/중앙: 교실 캔버스 -->
     <main id="classroomCanvas" tabindex="0">
+      <!-- 인쇄 전용: 상단 학급 좌석배치도 타이틀 & 교실 방향 안내 배너 -->
+      <div id="printClassroomHeader" class="print-only-banner">
+        <div class="pch-left">
+          <span id="printClassTitle" class="pch-class">1학년 2반 좌석배치도</span>
+          <span id="printTabSubtitle" class="pch-badge">일반배치</span>
+        </div>
+        <div class="pch-right">
+          <span id="printSeatSummary" class="pch-meta">배정 24명</span>
+          <span class="pch-divider">·</span>
+          <span class="pch-pov">교사 시점 (하단 교탁·칠판 기준)</span>
+        </div>
+      </div>
+
       <!-- 상단 교실 뒤편 안내 바 -->
       <div class="back-wall-indicator">
         <span>교실 뒤편 · 사물함 및 게시판 영역</span>
@@ -95,6 +108,9 @@
             <span class="desk-sub">전면 칠판 기준 (교사 시점)</span>
           </div>
           <div class="desk-edit-hint">✏️ 반 이름 수정</div>
+        </div>
+        <div class="print-blackboard-bar">
+          <span>전 면 칠 판</span>
         </div>
       </div>
     </main>
@@ -276,8 +292,16 @@
         </div>
       </div>
 
-      <!-- 3. 명렬표 포함 옵션 -->
-      <div class="print-option-wrap" style="margin-top: 10px;">
+      <!-- 3. 빈 분단·공석 자동 정리 및 명렬표 포함 옵션 -->
+      <div class="print-option-wrap" style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
+        <label class="print-checkbox-label">
+          <input type="checkbox" id="chkPrintAutoTrimEmpty" checked>
+          <div>
+            <strong>빈 분단·미배정 공석 자동 정리 (실제 배정된 교실 좌석만 깔끔하게 확대)</strong>
+            <p>학생이 없는 빈 분단(예: 4·5분단)과 공석을 정리하여 실제 앉은 책상들을 교실 비율에 맞게 크게 인쇄합니다. (해제 시 빈 책상 틀까지 모두 표시)</p>
+          </div>
+        </label>
+
         <label class="print-checkbox-label">
           <input type="checkbox" id="chkPrintWithRoster" checked>
           <div>
@@ -288,7 +312,7 @@
       </div>
 
       <div class="print-page-hint">
-        <span>📄 A4 가로(Landscape) 1페이지 맞춤 · 교실뒤편 등 불필요한 설명 및 UI 자동 제거</span>
+        <span>📄 A4 가로(Landscape) 교실 평면도(가로형 책상+의자+분단+교탁/칠판) 1페이지 자동 조판</span>
       </div>
 
       <div class="modal-footer">

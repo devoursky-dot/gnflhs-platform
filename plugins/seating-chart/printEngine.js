@@ -1,7 +1,7 @@
 /**
- * GNFLHS 스마트 좌석배치도 - A4 가로(Landscape) 풀페이지 반응형 스케일링 & 정밀 타이포그래피 인쇄 엔진 (printEngine.js)
- * - A4 가로 용지(297×210mm) 내 인쇄 안전 영역(287×202mm)을 분단·줄·책상 수에 맞춰 상하좌우 꽉 차게 자동 계산
- * - 한 분단 내 인접 책상끼리는 단일 경계선으로 매끄럽게 결합하고, 빈자리도 짝꿍 책상과 기하학적으로 정합 유지
+ * GNFLHS 스마트 좌석배치도 - A4 가로(Landscape) 교실 평면도 적응형 인쇄 엔진 (printEngine.js)
+ * - 실제 교실 책상 상판의 가로형 비례(가로:세로 ≈ 1.55:1 ~ 1.75:1)와 의자 등받이·전면 몰딩·교탁·칠판 구조를 재현
+ * - 학생이 한 명도 없는 빈 분단(예: 4·5분단) 및 빈 줄/공석을 상황별로 자동 감지·정리하여 실제 배정 좌석을 큼직하고 균형 있게 조판
  * - 4글자 이상 긴 이름 축소 시에도 행 전체의 번호·이름 수평 기준선(Y축)이 1px 오차 없이 일직선 정렬
  */
 import { SEATING_CONFIG } from './config.js';
@@ -24,24 +24,58 @@ function rememberStyle(list, el, props) {
   list.push({ el, saved });
 }
 
+function isDeskAssigned(desk) {
+  return Boolean(desk && typeof desk.studentName === 'string' && desk.studentName.trim().length > 0);
+}
+
 export function executeSeatingPrint({
   selectedFormat = 'name-num-bracket',
   fitMode = 'font-size',
   withRoster = true,
+  autoTrimEmpty = SEATING_CONFIG.printAutoTrimEmpty,
   tab,
   rosterListContainer,
   onBeforePrintDialog
 }) {
   const restoredStyles = [];
+  const restoredText = [];
 
   // 1. 선택된 표기 양식 바인딩
   document.body.dataset.printFormat = selectedFormat;
+
+  const zones = Array.isArray(tab?.zones) ? tab.zones : [];
+  let totalAssignedInClass = 0;
+  zones.forEach((z) => {
+    (z.rows || []).forEach((r) => {
+      (r.desks || []).forEach((d) => {
+        if (isDeskAssigned(d)) totalAssignedInClass += 1;
+      });
+    });
+  });
+
+  // 상단 교실 배너 정보 동기화
+  const printClassTitle = document.getElementById('printClassTitle');
+  const printTabSubtitle = document.getElementById('printTabSubtitle');
+  const printSeatSummary = document.getElementById('printSeatSummary');
+  const rawClassName = (tab?.className || SEATING_CONFIG.defaultClassName).replace(/\s*교탁\s*$/, '').trim();
+  if (printClassTitle) {
+    printClassTitle.textContent = `${rawClassName || SEATING_CONFIG.defaultClassName} 좌석배치도`;
+  }
+  if (printTabSubtitle) {
+    const tabTitle = (tab?.title || tab?.name || '일반배치').trim();
+    printTabSubtitle.textContent = tabTitle;
+  }
+  if (printSeatSummary) {
+    const rosterLen = Array.isArray(tab?.roster) ? tab.roster.length : totalAssignedInClass;
+    printSeatSummary.textContent =
+      rosterLen > 0 ? `재적 ${rosterLen}명 · 배정 ${totalAssignedInClass}명` : `배정 ${totalAssignedInClass}명`;
+  }
 
   const hasRoster = Boolean(
     withRoster && tab && Array.isArray(tab.roster) && tab.roster.length > 0 && rosterListContainer
   );
 
-  // 2. 명렬표 포함 여부 및 우측 초슬림 1열 균등 분할 행 계산 (다인원 학급/자습실까지 자동 대응)
+  // 2. 명렬표 포함 여부 및 우측 초슬림 1열 균등 분할 행 계산
   const rosterSidebar = document.getElementById('rosterSidebar');
   if (hasRoster) {
     document.body.classList.remove('print-hide-roster');
@@ -64,7 +98,6 @@ export function executeSeatingPrint({
       rosterSidebar.style.setProperty('max-width', rw, 'important');
     }
 
-    // 36명 초과 대인원 시 명렬표 내부 폰트/뱃지 높이 자동 슬림화
     if (totalStudents > 36) {
       rosterListContainer.querySelectorAll('.student-no-box').forEach((box) => {
         rememberStyle(restoredStyles, box, ['height', 'font-size']);
@@ -83,58 +116,119 @@ export function executeSeatingPrint({
     }
   }
 
-  // 3. A4 가로 인쇄 영역(287×202mm -> ~1084×763px) 기반 풀페이지 동적 책상/통로 치수 산출
+  // 3. 상황별 활성 분단·활성 줄·책상 슬롯 분석 (빈 분단 및 빈 줄 자동 정리)
+  const shouldTrimEmpty = Boolean(autoTrimEmpty && totalAssignedInClass > 0);
+  const zoneColumns = document.querySelectorAll('#zonesContainer .zone-column');
+
+  const zoneMetaList = zones.map((zone, zIdx) => {
+    const rows = Array.isArray(zone.rows) ? zone.rows : [];
+    let assignedCount = 0;
+    let maxAssignedRightEdge = 0;
+    let lastAssignedRowIndex = -1;
+
+    rows.forEach((row, rIdx) => {
+      (row.desks || []).forEach((d) => {
+        if (isDeskAssigned(d)) {
+          assignedCount += 1;
+          const rightEdge = (Number(d.pos) || 0) + 1;
+          if (rightEdge > maxAssignedRightEdge) maxAssignedRightEdge = rightEdge;
+          if (rIdx > lastAssignedRowIndex) lastAssignedRowIndex = rIdx;
+        }
+      });
+    });
+
+    const configuredMaxDesks = zone.maxDesks || SEATING_CONFIG.defaultMaxDesks;
+    const effectiveMaxDesks =
+      shouldTrimEmpty && assignedCount > 0
+        ? Math.max(1, Math.min(configuredMaxDesks, Math.ceil(maxAssignedRightEdge)))
+        : configuredMaxDesks;
+
+    return {
+      zone,
+      zIdx,
+      zoneEl: zoneColumns[zIdx] || null,
+      assignedCount,
+      isActive: shouldTrimEmpty ? assignedCount > 0 : true,
+      effectiveMaxDesks,
+      lastAssignedRowIndex,
+      totalRows: rows.length
+    };
+  });
+
+  // 만약 모든 분단이 비어 있다면 전체 분단 유지
+  const activeZoneMetas = zoneMetaList.some((m) => m.isActive)
+    ? zoneMetaList.filter((m) => m.isActive)
+    : zoneMetaList;
+
+  const maxRowsAcrossActive = Math.max(
+    1,
+    ...activeZoneMetas.map((m) =>
+      shouldTrimEmpty && m.lastAssignedRowIndex >= 0 ? m.lastAssignedRowIndex + 1 : m.totalRows || 1
+    )
+  );
+
+  // 4. A4 가로 인쇄 영역(287×202mm -> ~1084×763px) 기반 가로형 교실 책상 치수 산출
   const pageWidthPx = Math.floor(SEATING_CONFIG.printPageWidthMm * PX_PER_MM);
   const pageHeightPx = Math.floor(SEATING_CONFIG.printPageHeightMm * PX_PER_MM);
 
   const workspaceGapPx = hasRoster ? 14 : 0;
   const rosterWidthPx = hasRoster ? SEATING_CONFIG.printRosterWidthPx : 0;
-  const availCanvasW = pageWidthPx - rosterWidthPx - workspaceGapPx - 6;
+  const canvasPaddingX = 28; // 좌우 패딩 + 보더 여유분
+  const availCanvasW = pageWidthPx - rosterWidthPx - workspaceGapPx - canvasPaddingX;
 
-  const podiumBlockH = 58; // 교탁 높이(44px) + 상단 여백(14px)
-  const availZonesH = pageHeightPx - podiumBlockH - 4;
+  const headerBannerBlockH = 42; // 상단 학급 타이틀 배너(34px) + 여백(8px)
+  const podiumBlockH = 62; // 하단 교탁(36px) + 칠판바(13px) + 여백(13px)
+  const zoneHeaderBlockH = 34; // 분단 헤더(22px) + 하단 여백(12px)
+  const availRowsH = pageHeightPx - headerBannerBlockH - podiumBlockH - zoneHeaderBlockH - 22;
 
-  const zones = tab?.zones || [];
-  const numZones = Math.max(1, zones.length);
+  const numZones = Math.max(1, activeZoneMetas.length);
   const totalDeskSlots = Math.max(
     1,
-    zones.reduce((sum, z) => sum + (z.maxDesks || SEATING_CONFIG.defaultMaxDesks), 0)
-  );
-  const maxRows = Math.max(
-    1,
-    ...zones.map((z) => (Array.isArray(z.rows) ? z.rows.length : 1))
+    activeZoneMetas.reduce((sum, m) => sum + m.effectiveMaxDesks, 0)
   );
 
-  // 분단 사이 세로 통로 폭 (최소 20px 보장, 분단 수에 맞춰 시각적으로 뚜렷한 통로 배분)
-  const aisleGapPx =
+  // 분단 사이 복도(통로) 폭: 최소 28px 보장, 분단 수에 맞춰 여유로운 교실 통로 확보
+  let aisleGapPx =
     numZones > 1
       ? Math.max(
           SEATING_CONFIG.printMinAisleGapPx,
-          Math.min(44, Math.round((availCanvasW * 0.095) / (numZones - 1)))
+          Math.min(54, Math.round((availCanvasW * 0.115) / (numZones - 1)))
         )
       : 0;
 
-  // 책상 1개 가로 폭: 가용 가로 영역을 빈틈없이 채우도록 산출
-  const printDeskW = Math.max(
-    72,
-    Math.floor((availCanvasW - aisleGapPx * (numZones - 1)) / totalDeskSlots)
-  );
+  // 책상 1개 가로 폭 산출 (현실적인 교실 책상 비례 유지를 위해 상한 146px 클램핑 후 남는 폭은 통로로 배분)
+  const rawDeskW = Math.floor((availCanvasW - aisleGapPx * (numZones - 1)) / totalDeskSlots);
+  const printDeskW = Math.max(70, Math.min(146, rawDeskW));
 
-  // 줄(행) 사이 가로 통로 간격 및 책상 1개 세로 높이 산출 (A4 상단부터 교탁 위까지 꽉 차게 확장)
-  let rowGapPx =
-    maxRows > 1
-      ? Math.max(10, Math.min(22, Math.round((availZonesH * 0.085) / (maxRows - 1))))
-      : 0;
-
-  const rawDeskH = Math.floor((availZonesH - rowGapPx * (maxRows - 1)) / maxRows);
-  const printDeskH = Math.max(52, Math.min(rawDeskH, Math.round(printDeskW * 1.32)));
-
-  if (maxRows > 1 && printDeskH < rawDeskH) {
-    const leftoverH = availZonesH - printDeskH * maxRows;
-    rowGapPx = Math.min(38, Math.floor(leftoverH / (maxRows - 1)));
+  if (numZones > 1 && printDeskW < rawDeskW) {
+    const remainingW = availCanvasW - printDeskW * totalDeskSlots;
+    aisleGapPx = Math.min(72, Math.floor(remainingW / (numZones - 1)));
   }
 
-  const totalGridH = printDeskH * maxRows + rowGapPx * Math.max(0, maxRows - 1);
+  // [핵심] 교실 책상 가로:세로 황금비율 가드레일 (절대 세로가 가로보다 길어지지 않도록 보장)
+  const effectiveHeightRatio =
+    maxRowsAcrossActive <= 4
+      ? Math.min(0.66, SEATING_CONFIG.printDeskHeightRatio + 0.03)
+      : SEATING_CONFIG.printDeskHeightRatio;
+  const idealDeskH = Math.round(printDeskW * effectiveHeightRatio);
+  const hardMaxDeskH = Math.round(printDeskW * SEATING_CONFIG.printDeskMaxHeightRatio);
+  const minRowGapPx = maxRowsAcrossActive > 1 ? 16 : 0;
+  const maxFittingDeskH = Math.floor(
+    (availRowsH - minRowGapPx * (maxRowsAcrossActive - 1)) / maxRowsAcrossActive
+  );
+
+  const printDeskH = Math.max(42, Math.min(idealDeskH, hardMaxDeskH, maxFittingDeskH));
+
+  // 앞뒤 책상 줄 간격 (의자 등받이가 들어갈 자연스러운 교실 앞뒤 간격 16~38px)
+  let rowGapPx = minRowGapPx;
+  if (maxRowsAcrossActive > 1) {
+    const leftoverH = Math.max(0, availRowsH - printDeskH * maxRowsAcrossActive);
+    const maxGap = maxRowsAcrossActive <= 4 ? 38 : 30;
+    rowGapPx = Math.max(16, Math.min(maxGap, Math.floor(leftoverH / (maxRowsAcrossActive - 1))));
+  }
+
+  const totalZoneColumnH =
+    zoneHeaderBlockH + printDeskH * maxRowsAcrossActive + rowGapPx * Math.max(0, maxRowsAcrossActive - 1);
 
   const zonesContainer = document.getElementById('zonesContainer');
   if (zonesContainer) {
@@ -142,29 +236,67 @@ export function executeSeatingPrint({
     zonesContainer.style.setProperty('gap', `${aisleGapPx}px`, 'important');
   }
 
-  // 각 분단·줄·책상의 인쇄용 치수 및 인접 책상 테두리 일체화 적용
+  // 5. 각 분단·줄·책상의 인쇄용 치수 및 짝꿍 책상 결합 적용
   const span = SEATING_CONFIG.minDeskSlotSpan;
-  const zoneColumns = document.querySelectorAll('#zonesContainer .zone-column');
+  let visibleZoneOrder = 0;
 
-  zones.forEach((zone, zIdx) => {
-    const zoneEl = zoneColumns[zIdx];
+  zoneMetaList.forEach((meta) => {
+    const { zone, zoneEl, isActive, effectiveMaxDesks } = meta;
     if (!zoneEl) return;
-    const zMaxDesks = zone.maxDesks || SEATING_CONFIG.defaultMaxDesks;
-    const printTrackW = zMaxDesks * printDeskW;
 
-    rememberStyle(restoredStyles, zoneEl, ['width', 'min-width', 'height', 'gap', 'justify-content']);
+    if (!isActive) {
+      rememberStyle(restoredStyles, zoneEl, ['display']);
+      zoneEl.style.setProperty('display', 'none', 'important');
+      return;
+    }
+
+    visibleZoneOrder += 1;
+    const zoneTitleEl = zoneEl.querySelector('.zone-title');
+    if (zoneTitleEl) {
+      restoredText.push({ el: zoneTitleEl, text: zoneTitleEl.textContent });
+      zoneTitleEl.textContent = `${visibleZoneOrder}분단`;
+    }
+
+    const printTrackW = effectiveMaxDesks * printDeskW;
+    rememberStyle(restoredStyles, zoneEl, [
+      'display',
+      'width',
+      'min-width',
+      'height',
+      'gap',
+      'justify-content'
+    ]);
     zoneEl.style.setProperty('width', `${printTrackW}px`, 'important');
     zoneEl.style.setProperty('min-width', `${printTrackW}px`, 'important');
-    zoneEl.style.setProperty('height', `${totalGridH}px`, 'important');
+    zoneEl.style.setProperty('height', `${totalZoneColumnH}px`, 'important');
     zoneEl.style.setProperty('gap', `${rowGapPx}px`, 'important');
-    zoneEl.style.setProperty('justify-content', 'flex-end', 'important');
+    zoneEl.style.setProperty('justify-content', 'flex-start', 'important');
+
+    const zoneHeaderEl = zoneEl.querySelector('.zone-header');
+    if (zoneHeaderEl) {
+      rememberStyle(restoredStyles, zoneHeaderEl, ['margin-bottom', 'height']);
+      zoneHeaderEl.style.setProperty('height', '22px', 'important');
+      zoneHeaderEl.style.setProperty('margin-bottom', '0px', 'important');
+    }
 
     const rowEls = zoneEl.querySelectorAll('.zone-row');
     (zone.rows || []).forEach((row, rIdx) => {
       const rowEl = rowEls[rIdx];
       if (!rowEl) return;
 
-      rememberStyle(restoredStyles, rowEl, ['height', 'min-height', 'margin-bottom', 'padding']);
+      if (rIdx >= maxRowsAcrossActive) {
+        rememberStyle(restoredStyles, rowEl, ['display']);
+        rowEl.style.setProperty('display', 'none', 'important');
+        return;
+      }
+
+      rememberStyle(restoredStyles, rowEl, [
+        'display',
+        'height',
+        'min-height',
+        'margin-bottom',
+        'padding'
+      ]);
       rowEl.style.setProperty('height', `${printDeskH}px`, 'important');
       rowEl.style.setProperty('min-height', `${printDeskH}px`, 'important');
       rowEl.style.setProperty('margin-bottom', '0px', 'important');
@@ -182,24 +314,13 @@ export function executeSeatingPrint({
         const cardEl = rowEl.querySelector(`.desk-card[data-desk-id="${desk.id}"]`);
         if (!cardEl) return;
 
-        const isAssigned = Boolean(desk.studentName && desk.studentName.trim());
-        const pos = desk.pos || 0;
+        const isAssigned = isDeskAssigned(desk);
+        const pos = Number(desk.pos) || 0;
         const leftPx = Math.round(pos * printDeskW);
 
-        const leftNeighbor = desks.find(
-          (other) => other.id !== desk.id && Math.abs((other.pos || 0) + span - pos) < 0.05
-        );
-        const rightNeighbor = desks.find(
-          (other) => other.id !== desk.id && Math.abs(pos + span - (other.pos || 0)) < 0.05
-        );
-        const leftNeighborAssigned = Boolean(
-          leftNeighbor && leftNeighbor.studentName && leftNeighbor.studentName.trim()
-        );
-        const rightNeighborAssigned = Boolean(
-          rightNeighbor && rightNeighbor.studentName && rightNeighbor.studentName.trim()
-        );
-
         rememberStyle(restoredStyles, cardEl, [
+          'display',
+          'visibility',
           'left',
           'width',
           'height',
@@ -211,87 +332,115 @@ export function executeSeatingPrint({
           'border-right-width'
         ]);
 
+        // 자동 정리 모드일 때 미배정 빈자리는 레이아웃 좌표만 유지하고 깔끔하게 숨김
+        if (shouldTrimEmpty && !isAssigned) {
+          cardEl.style.setProperty('visibility', 'hidden', 'important');
+          cardEl.style.setProperty('left', `${leftPx}px`, 'important');
+          cardEl.style.setProperty('width', `${printDeskW}px`, 'important');
+          cardEl.style.setProperty('height', `${printDeskH}px`, 'important');
+          return;
+        }
+
+        const leftNeighbor = desks.find(
+          (other) => other.id !== desk.id && Math.abs((Number(other.pos) || 0) + span - pos) < 0.05
+        );
+        const rightNeighbor = desks.find(
+          (other) => other.id !== desk.id && Math.abs(pos + span - (Number(other.pos) || 0)) < 0.05
+        );
+
+        const hasVisibleLeftNeighbor = shouldTrimEmpty
+          ? Boolean(leftNeighbor && isDeskAssigned(leftNeighbor))
+          : Boolean(leftNeighbor);
+        const hasVisibleRightNeighbor = shouldTrimEmpty
+          ? Boolean(rightNeighbor && isDeskAssigned(rightNeighbor))
+          : Boolean(rightNeighbor);
+
+        cardEl.style.setProperty('visibility', 'visible', 'important');
         cardEl.style.setProperty('left', `${leftPx}px`, 'important');
         cardEl.style.setProperty('width', `${printDeskW}px`, 'important');
         cardEl.style.setProperty('height', `${printDeskH}px`, 'important');
 
         cardEl.style.setProperty(
           'border-top-left-radius',
-          leftNeighbor ? '0px' : '8px',
+          hasVisibleLeftNeighbor ? '3.5px' : '6px',
           'important'
         );
         cardEl.style.setProperty(
           'border-bottom-left-radius',
-          leftNeighbor ? '0px' : '8px',
+          hasVisibleLeftNeighbor ? '3.5px' : '6px',
           'important'
         );
         cardEl.style.setProperty(
           'border-top-right-radius',
-          rightNeighbor ? '0px' : '8px',
+          hasVisibleRightNeighbor ? '3.5px' : '6px',
           'important'
         );
         cardEl.style.setProperty(
           'border-bottom-right-radius',
-          rightNeighbor ? '0px' : '8px',
+          hasVisibleRightNeighbor ? '3.5px' : '6px',
           'important'
         );
 
         if (isAssigned) {
           cardEl.style.setProperty(
             'border-left-width',
-            leftNeighborAssigned ? '1px' : '2px',
+            hasVisibleLeftNeighbor ? '1.25px' : '2px',
             'important'
           );
           cardEl.style.setProperty(
             'border-right-width',
-            rightNeighborAssigned ? '1px' : '2px',
+            hasVisibleRightNeighbor ? '1.25px' : '2px',
             'important'
           );
-        } else {
-          if (leftNeighborAssigned) {
-            cardEl.style.setProperty('border-left-width', '0px', 'important');
-          }
-          if (rightNeighborAssigned) {
-            cardEl.style.setProperty('border-right-width', '0px', 'important');
-          }
         }
       });
     });
   });
 
-  // 4. 커진 책상 크기에 비례한 초대형 학생 이름 타이포그래피 & 수평 기준선 정밀 정렬
-  const activeSelector = FORMAT_SELECTOR_MAP[selectedFormat] || '.dp-format-bracket';
-  const isTwoLine = selectedFormat.startsWith('top-');
+  // 6. 가로형 책상 내부 타이포그래피 & 4글자 이상 긴 이름 자동 폭 맞춤 + 수평 기준선 정렬
+  const formatSelector =
+    FORMAT_SELECTOR_MAP[selectedFormat] || FORMAT_SELECTOR_MAP['name-num-bracket'];
+  const isTwoLine =
+    selectedFormat === 'top-num-bot-name' || selectedFormat === 'top-name-bot-num';
 
-  const idealNameSize = isTwoLine
-    ? Math.min(
-        SEATING_CONFIG.printTwoLineFontPx,
-        Math.round(Math.min(printDeskW * 0.295, printDeskH * 0.36))
+  // 책상 상판 내부에 충분한 여백이 남도록 글자 크기를 책상 높이/폭에 비례 산출
+  const baseNameFontPx = isTwoLine
+    ? Math.max(
+        15,
+        Math.min(
+          SEATING_CONFIG.printTwoLineFontPx,
+          Math.round(printDeskH * 0.37),
+          Math.round(printDeskW * 0.23)
+        )
       )
-    : Math.min(
-        SEATING_CONFIG.printOneLineFontPx,
-        Math.round(Math.min(printDeskW * 0.25, printDeskH * 0.34))
+    : Math.max(
+        14,
+        Math.min(
+          SEATING_CONFIG.printOneLineFontPx,
+          Math.round(printDeskH * 0.34),
+          Math.round(printDeskW * 0.20)
+        )
       );
 
-  const baseNameFontPx = Math.max(18, idealNameSize);
-  const fixedNameBoxHeightPx = Math.round(baseNameFontPx * 1.14);
-  // 두 줄 표기 시 번호 크기는 이름의 정확히 절반(50%) 크기로 전 좌석 통일
   const baseSubFontPx = isTwoLine
-    ? Math.max(10, Math.round(baseNameFontPx * 0.5))
-    : Math.max(12, Math.round(baseNameFontPx * 0.54));
+    ? Math.max(10, Math.round(baseNameFontPx * 0.52))
+    : Math.max(11, Math.round(baseNameFontPx * 0.68));
+
+  const nameBoxHeightPx = Math.ceil(baseNameFontPx * 1.15);
+  const subBoxHeightPx = Math.ceil(baseSubFontPx * 1.12);
+  const innerCardWidth = Math.max(46, printDeskW - 14);
 
   const measureCanvas = document.createElement('canvas');
   const measureCtx = measureCanvas.getContext('2d');
-  const fontStack = '-apple-system, BlinkMacSystemFont, "Pretendard", "Malgun Gothic", sans-serif';
-
-  const cardInnerPadPx = 14;
-  const innerCardWidth = Math.max(50, printDeskW - cardInnerPadPx);
+  const fontStack =
+    '-apple-system, BlinkMacSystemFont, "Pretendard", "Malgun Gothic", "Segoe UI", sans-serif';
 
   document.querySelectorAll('.desk-card.assigned').forEach((card) => {
-    const item = card.querySelector(activeSelector);
-    if (!item) return;
-    const nameEl = item.querySelector('.dp-main');
-    const subEl = item.querySelector('.dp-sub');
+    const activeItem = card.querySelector(formatSelector);
+    if (!activeItem) return;
+
+    const nameEl = activeItem.querySelector('.dp-main');
+    const subEl = activeItem.querySelector('.dp-sub');
     if (!nameEl) return;
 
     const studentName = nameEl.textContent.trim();
@@ -299,24 +448,29 @@ export function executeSeatingPrint({
 
     rememberStyle(restoredStyles, nameEl, [
       'font-size',
-      'height',
       'transform',
       'transform-origin',
       'display',
+      'height',
+      'line-height',
       'align-items',
       'justify-content',
       'margin-left',
       'margin-right'
     ]);
     if (subEl) {
-      rememberStyle(restoredStyles, subEl, ['font-size']);
+      rememberStyle(restoredStyles, subEl, ['font-size', 'height', 'line-height', 'display']);
       subEl.style.setProperty('font-size', `${baseSubFontPx}px`, 'important');
+      if (isTwoLine) {
+        subEl.style.setProperty('height', `${subBoxHeightPx}px`, 'important');
+        subEl.style.setProperty('line-height', `${subBoxHeightPx}px`, 'important');
+      }
     }
 
-    // 두 줄 포맷에서 긴 이름(4글자 등)의 폰트가 축소되어도 옆 좌석과 번호/이름 Y축이 일직선으로 맞도록 고정 높이 박스 부여
     if (isTwoLine) {
-      nameEl.style.setProperty('height', `${fixedNameBoxHeightPx}px`, 'important');
-      nameEl.style.setProperty('display', 'inline-flex', 'important');
+      nameEl.style.setProperty('height', `${nameBoxHeightPx}px`, 'important');
+      nameEl.style.setProperty('line-height', `${nameBoxHeightPx}px`, 'important');
+      nameEl.style.setProperty('display', 'flex', 'important');
       nameEl.style.setProperty('align-items', 'center', 'important');
       nameEl.style.setProperty('justify-content', 'center', 'important');
     }
@@ -331,7 +485,7 @@ export function executeSeatingPrint({
         const measuredSubW = measureCtx
           ? measureCtx.measureText(subText).width
           : subText.length * baseSubFontPx * 0.65;
-        maxAllowedNameWidth = Math.max(38, innerCardWidth - Math.ceil(measuredSubW) - 8);
+        maxAllowedNameWidth = Math.max(36, innerCardWidth - Math.ceil(measuredSubW) - 6);
       }
     }
 
@@ -370,7 +524,7 @@ export function executeSeatingPrint({
     onBeforePrintDialog();
   }
 
-  // 5. 인쇄 종료 후 화면용 인라인 스타일 100% 원상 복구
+  // 7. 인쇄 종료 후 화면용 인라인 스타일 및 분단 타이틀 100% 원상 복구
   const handleAfterPrint = () => {
     for (let i = restoredStyles.length - 1; i >= 0; i--) {
       const { el, saved } = restoredStyles[i];
@@ -382,10 +536,14 @@ export function executeSeatingPrint({
         }
       }
     }
+    for (let i = restoredText.length - 1; i >= 0; i--) {
+      const { el, text } = restoredText[i];
+      el.textContent = text;
+    }
     window.removeEventListener('afterprint', handleAfterPrint);
   };
   window.addEventListener('afterprint', handleAfterPrint);
 
-  // 6. 브라우저 인쇄 다이얼로그 호출
+  // 8. 브라우저 인쇄 다이얼로그 호출
   window.print();
 }

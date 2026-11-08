@@ -123,7 +123,10 @@ function renderCanvas() {
 
   const teacherNameEl = document.getElementById('teacherClassName');
   if (teacherNameEl) {
-    teacherNameEl.textContent = `${tab.className} 교탁`;
+    const baseClass = (tab.className || SEATING_CONFIG.defaultClassName)
+      .replace(/\s*교탁\s*$/, '')
+      .trim();
+    teacherNameEl.textContent = `${baseClass || SEATING_CONFIG.defaultClassName} 교탁`;
   }
 
   const container = document.getElementById('zonesContainer');
@@ -816,6 +819,9 @@ function initEventListeners() {
     const fitMode =
       document.querySelector('input[name="printNameFitMode"]:checked')?.value || 'font-size';
     const withRoster = document.getElementById('chkPrintWithRoster').checked;
+    const autoTrimEmpty = document.getElementById('chkPrintAutoTrimEmpty')
+      ? document.getElementById('chkPrintAutoTrimEmpty').checked
+      : SEATING_CONFIG.printAutoTrimEmpty;
     const tab = getActiveTab();
     const rosterListContainer = document.getElementById('rosterListContainer');
 
@@ -823,6 +829,7 @@ function initEventListeners() {
       selectedFormat,
       fitMode,
       withRoster,
+      autoTrimEmpty,
       tab,
       rosterListContainer,
       onBeforePrintDialog: () => printModal.classList.add('hidden')

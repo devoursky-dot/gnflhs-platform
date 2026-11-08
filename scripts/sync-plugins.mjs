@@ -90,11 +90,11 @@ const OFFICIAL_PLUGIN_META = {
     description: '스마트 좌석배치도 (교실/자습실 단계별 구조 설정, 반 칸 이동 및 A4 가로 1페이지 출력)',
     icon: 'LayoutGrid',
     category: 'classroom',
-    version: '1.4.0',
+    version: '1.5.0',
     entryUrl: '/plugin/seating-chart',
     allowedRoles: ['super_admin', 'admin', 'teacher', 'student'],
     studioProjectId: 'proj-seating-chart',
-    note: 'V2 A4 가로 풀페이지 동적 스케일링 · 인접 책상 일체형 보더 · 수평 기준선 정밀 인쇄 엔진 (v1.4.0)'
+    note: 'V2 A4 가로 교실 평면도(가로형 책상+의자 등받이+분단 헤더+교탁/칠판) 및 빈 분단·공석 상황별 자동 적응 엔진 (v1.5.0)'
   }
 };
 

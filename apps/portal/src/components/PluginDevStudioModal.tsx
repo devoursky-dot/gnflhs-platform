@@ -383,7 +383,7 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
       setIsDirty(false);
       setCacheEntries(listProjectCacheEntries(activeReadOnlyApp.id));
     }
-  }, [activeStudioProject?.id, activeReadOnlyApp?.id, plugins.length]);
+  }, [activeStudioProject?.id, activeStudioProject?.updatedAt, activeReadOnlyApp?.id, plugins.length]);
 
   // Ctrl+S 단축키 저장
   useEffect(() => {
@@ -562,7 +562,7 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
   const handleRunInNewTab = async (targetDevice: DeviceViewportType) => {
     try {
       if (activeStudioProject) {
-        const saved = await handleSaveProject();
+        const saved = isDirty ? await handleSaveProject() : activeStudioProject;
         const pid = saved?.id || activeStudioProject.id;
         window.open(`/?testRunner=${encodeURIComponent(pid)}&device=${targetDevice}`, '_blank');
       } else if (activeReadOnlyApp) {
