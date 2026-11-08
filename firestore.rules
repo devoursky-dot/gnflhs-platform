@@ -33,5 +33,10 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated();
     }
+
+    // 클라우드 스토리지 파일 저장소
+    match /storage_meta/{docId} {
+      allow read, write: if isAuthenticated();
+    }
   }
 }

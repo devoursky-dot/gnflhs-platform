@@ -6,7 +6,26 @@ import { subscribePlugins } from './services/pluginService';
 import { PluginManagerModal } from './components/PluginManagerModal';
 import { PluginDevStudioModal } from './components/PluginDevStudioModal';
 import { DynamicRunnerModal } from './components/DynamicRunnerModal';
-import { LayoutGrid, LogIn, LogOut, ShieldCheck, PenTool, Users, ShieldAlert, Puzzle, Sparkles, ExternalLink, RefreshCw, Code2, Zap } from 'lucide-react';
+import { StorageExplorerModal } from './components/StorageExplorerModal';
+import {
+  LayoutGrid,
+  LogIn,
+  LogOut,
+  ShieldCheck,
+  PenTool,
+  Users,
+  ShieldAlert,
+  Puzzle,
+  Sparkles,
+  ExternalLink,
+  RefreshCw,
+  Code2,
+  Zap,
+  HardDrive,
+  SlidersHorizontal,
+  Eye,
+  EyeOff
+} from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -14,6 +33,7 @@ export default function App() {
   const [devModeActive, setDevModeActive] = useState<boolean>(true); // 개발자 모드 기본 ON
   const [isManagerOpen, setIsManagerOpen] = useState(false);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [isStorageOpen, setIsStorageOpen] = useState(false);
   const [activeDynamicPlugin, setActiveDynamicPlugin] = useState<AppPlugin | null>(null);
 
   useEffect(() => {
@@ -128,78 +148,116 @@ export default function App() {
         </div>
       </header>
 
-      {/* 2. 최고관리자 전용 개발자 제어 바 */}
+      {/* 2. 최고관리자 전용 제어 바 */}
       {isAdmin && (
         <div style={{
-          backgroundColor: '#312e81',
-          color: '#e0e7ff',
-          padding: '10px 32px',
+          backgroundColor: '#090d16',
+          color: '#e2e8f0',
+          padding: '8px 32px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          fontSize: '13px'
+          borderBottom: '1px solid #1e293b'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Sparkles size={16} color="#fbbf24" />
-            <span><strong>개발자 제어 센터</strong>: 현재 최고관리자({SUPER_ADMIN_EMAIL})로 접속 중입니다.</span>
+            <span style={{ fontSize: '11px', backgroundColor: '#2563eb', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
+              ADMIN
+            </span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8', fontFamily: 'monospace' }}>{SUPER_ADMIN_EMAIL}</span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={devModeActive}
-                onChange={(e) => setDevModeActive(e.target.checked)}
-              />
-              <span>개발/베타 모듈 노출</span>
-            </label>
-
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
-              onClick={() => setIsStudioOpen(true)}
+              onClick={() => setDevModeActive(!devModeActive)}
+              title={devModeActive ? 'BETA 모듈 표시 중 (클릭 시 숨김)' : 'BETA 모듈 숨김 (클릭 시 표시)'}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '5px 14px',
-                backgroundColor: '#059669',
-                color: '#fff',
-                border: '1px solid #10b981',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                boxShadow: '0 2px 4px rgba(5, 150, 105, 0.4)'
-              }}
-            >
-              <Code2 size={15} /> 실시간 코드 개발 스튜디오
-            </button>
-
-            <button
-              onClick={() => setIsManagerOpen(true)}
-              style={{
-                padding: '5px 12px',
-                backgroundColor: '#4338ca',
-                color: '#fff',
-                border: '1px solid #6366f1',
-                borderRadius: '6px',
+                padding: '6px 12px',
+                backgroundColor: devModeActive ? '#1e293b' : 'transparent',
+                color: devModeActive ? '#facc15' : '#64748b',
+                border: '1px solid #334155',
+                borderRadius: '8px',
                 fontSize: '12px',
                 fontWeight: 'bold',
                 cursor: 'pointer'
               }}
             >
-              플러그인 관리자 열기
+              {devModeActive ? <Eye size={14} /> : <EyeOff size={14} />}
+              <span>BETA</span>
+            </button>
+
+            <button
+              onClick={() => setIsStudioOpen(true)}
+              title="실시간 코드 개발 스튜디오"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                backgroundColor: '#0284c7',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              <Code2 size={15} />
+              <span>스튜디오</span>
+            </button>
+
+            <button
+              onClick={() => setIsStorageOpen(true)}
+              title="클라우드 저장소 매니저"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                backgroundColor: '#1e293b',
+                color: '#38bdf8',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              <HardDrive size={15} />
+              <span>저장소</span>
+            </button>
+
+            <button
+              onClick={() => setIsManagerOpen(true)}
+              title="플러그인 모듈 관리자"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                backgroundColor: '#1e293b',
+                color: '#cbd5e1',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              <SlidersHorizontal size={15} />
+              <span>모듈 관리</span>
             </button>
           </div>
         </div>
       )}
 
       {/* 3. 메인 콘텐츠: 플러그인 모듈 카드 그리드 */}
-      <main style={{ maxWidth: '1100px', margin: '40px auto', padding: '0 24px' }}>
-        <div style={{ marginBottom: '24px' }}>
-          <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#0f172a' }}>앱 및 서비스 런처</h2>
-          <p style={{ fontSize: '14px', color: '#64748b', marginTop: '4px' }}>
-            원하시는 교육 및 학교 관리 모듈을 클릭하여 바로 시작하세요.
-          </p>
+      <main style={{ maxWidth: '1100px', margin: '32px auto', padding: '0 24px' }}>
+        <div style={{ marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a' }}>앱 및 서비스 런처</h2>
         </div>
 
         {/* 플러그인 카드 그리드 */}
@@ -340,6 +398,12 @@ export default function App() {
         isOpen={isStudioOpen}
         onClose={() => setIsStudioOpen(false)}
         plugins={plugins}
+      />
+
+      {/* 클라우드 저장소 매니저 모달 */}
+      <StorageExplorerModal
+        isOpen={isStorageOpen}
+        onClose={() => setIsStorageOpen(false)}
       />
 
       {/* 핫스왑된 플러그인 전체화면 런타임 러너 */}

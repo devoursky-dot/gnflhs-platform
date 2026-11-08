@@ -1,6 +1,6 @@
-import { collection, doc, getDocs, setDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@gnflhs/shared-auth';
-import { AppPlugin } from '@gnflhs/shared-types';
+import { AppPlugin, PluginDeployment, VirtualFile } from '@gnflhs/shared-types';
 
 const PLUGINS_COLLECTION = 'plugins';
 
@@ -71,8 +71,92 @@ export function subscribePlugins(callback: (plugins: AppPlugin[]) => void): () =
 }
 
 /**
- * 플러그인 상태 변경 (장착 ON / 해제 OFF / 개발테스트 전환)
+ * 플러그인 복제 (Fork for safe testing)
  */
+export async function forkPlugin(source: AppPlugin, newId: string, newName: string): Promise<AppPlugin> {
+  const forked: AppPlugin = {
+    ...source,
+    id: newId,
+    name: newName,
+    description: `[테스트 복제본] ${source.name}`,
+    status: 'development',
+    version: `${source.version}-draft`,
+    updatedAt: Date.now()
+  };
+  const docRef = doc(db, PLUGINS_COLLECTION, newId);
+  await setDoc(docRef, forked);
+  return forked;
+}
+
+/**
+ * 복제본을 운영 앱으로 승격 및 교체 (Promote & Hot-Swap with Auto-Snapshot)
+ */
+export async function promoteForkToProduction(
+  forkPluginData: AppPlugin,
+  targetPluginId: string,
+  note: string = '운영 승격'
+): Promise<void> {
+  const targetRef = doc(db, PLUGINS_COLLECTION, targetPluginId);
+  const targetSnap = await getDoc(targetRef);
+  let prevDeployments: PluginDeployment[] = [];
+
+  if (targetSnap.exists()) {
+    const prev = targetSnap.data() as AppPlugin;
+    prevDeployments = prev.deployments || [];
+    // 이전 운영본을 스냅샷으로 보관
+    prevDeployments.unshift({
+      version: prev.version,
+      deployedAt: Date.now(),
+      note: `교체 전 자동 백업 (${prev.version})`,
+      files: prev.files || [{ name: 'index.html', content: prev.customCode || '' }]
+    });
+  }
+
+  // 타깃 앱을 복제본의 최신 코드로 교체
+  await setDoc(targetRef, {
+    ...forkPluginData,
+    id: targetPluginId,
+    status: 'production',
+    deployments: prevDeployments.slice(0, 10), // 최근 10개 버전 스냅샷 유지
+    updatedAt: Date.now()
+  }, { merge: true });
+}
+
+/**
+ * 이전 버전 스냅샷으로 롤백 (Rollback)
+ */
+export async function rollbackDeployment(pluginId: string, deployment: PluginDeployment): Promise<void> {
+  const targetRef = doc(db, PLUGINS_COLLECTION, pluginId);
+  const mainFile = deployment.files.find(f => f.name.endsWith('.html')) || deployment.files[0];
+  await setDoc(targetRef, {
+    version: deployment.version,
+    customCode: mainFile ? mainFile.content : '',
+    files: deployment.files,
+    codeType: 'inline_html',
+    updatedAt: Date.now()
+  }, { merge: true });
+}
+
+/**
+ * 플러그인 영구 삭제
+ */
+export async function deletePlugin(pluginId: string): Promise<void> {
+  const docRef = doc(db, PLUGINS_COLLECTION, pluginId);
+  await deleteDoc(docRef);
+}
+
+/**
+ * 플러그인 멀티 파일 저장
+ */
+export async function savePluginFiles(pluginId: string, files: VirtualFile[], combinedCode: string): Promise<void> {
+  const docRef = doc(db, PLUGINS_COLLECTION, pluginId);
+  await setDoc(docRef, {
+    files,
+    customCode: combinedCode,
+    codeType: 'inline_html',
+    updatedAt: Date.now()
+  }, { merge: true });
+}
 export async function updatePlugin(plugin: AppPlugin): Promise<void> {
   const docRef = doc(db, PLUGINS_COLLECTION, plugin.id);
   await setDoc(docRef, {

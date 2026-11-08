@@ -15,6 +15,18 @@ export interface UserAccount {
 
 export type PluginStatus = 'production' | 'development' | 'disabled';
 
+export interface VirtualFile {
+  name: string; // 예: index.html, script.js, style.css
+  content: string;
+}
+
+export interface PluginDeployment {
+  version: string;
+  deployedAt: number;
+  note?: string;
+  files: VirtualFile[];
+}
+
 export interface AppPlugin {
   id: string; // 고유 식별자 (whiteboard, account-manager, dormitory)
   name: string; // 표시 이름
@@ -27,6 +39,8 @@ export interface AppPlugin {
   allowedRoles: UserRole[]; // 실행 권한
   codeType?: 'url' | 'inline_html'; // 'url': 정적 빌드 배포본, 'inline_html': 플랫폼 내 직접 입력한 핫스왑 코드
   customCode?: string; // 실시간 핫스왑 소스코드 (HTML/JS/CSS 통합)
+  files?: VirtualFile[]; // 멀티 파일 시스템
+  deployments?: PluginDeployment[]; // 버전 스냅샷 히스토리
   updatedAt: number;
 }
 

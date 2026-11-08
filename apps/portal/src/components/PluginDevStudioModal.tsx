@@ -1,7 +1,31 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { AppPlugin } from '@gnflhs/shared-types';
-import { hotSwapPluginCode, resetPluginToBuildVersion, updatePlugin } from '../services/pluginService';
-import { Code2, Play, Zap, RotateCcw, X, Sparkles, CheckCircle2, ShieldCheck, HelpCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { AppPlugin, VirtualFile, PluginDeployment } from '@gnflhs/shared-types';
+import {
+  hotSwapPluginCode,
+  resetPluginToBuildVersion,
+  forkPlugin,
+  promoteForkToProduction,
+  rollbackDeployment,
+  deletePlugin,
+  savePluginFiles
+} from '../services/pluginService';
+import {
+  Play,
+  Zap,
+  Copy,
+  History,
+  RotateCcw,
+  Trash2,
+  X,
+  FileCode,
+  Palette,
+  Code2,
+  Plus,
+  Monitor,
+  Tablet,
+  CheckCircle2,
+  ArrowRight
+} from 'lucide-react';
 
 interface PluginDevStudioModalProps {
   isOpen: boolean;
@@ -9,131 +33,120 @@ interface PluginDevStudioModalProps {
   plugins: AppPlugin[];
 }
 
-// 1. 전자칠판 고속 판서 템플릿
-const TEMPLATE_WHITEBOARD = `<!DOCTYPE html>
+const DEFAULT_FILES: VirtualFile[] = [
+  {
+    name: 'index.html',
+    content: `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>전자칠판 초경량 고속 판서</title>
-  <style>
-    body { margin: 0; background: #1e293b; color: #fff; font-family: sans-serif; overflow: hidden; }
-    #toolbar { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); background: rgba(15,23,42,0.9); padding: 8px 16px; border-radius: 24px; display: flex; gap: 8px; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 1px solid #334155; }
-    button { background: #334155; color: #fff; border: none; padding: 6px 14px; border-radius: 12px; font-weight: bold; cursor: pointer; }
-    button.active { background: #2563eb; }
-    canvas { display: block; touch-action: none; cursor: crosshair; }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="toolbar">
-    <button id="btnPen" class="active">✏️ 흰색 펜</button>
-    <button id="btnRed">🔴 빨강</button>
-    <button id="btnYellow">🟡 노랑</button>
-    <button id="btnEraser">🧹 지우개</button>
-    <button id="btnClear">🗑️ 모두 지우기</button>
+    <button id="btnPen" class="active" title="펜">✏️</button>
+    <button id="btnRed" title="빨강">🔴</button>
+    <button id="btnYellow" title="노랑">🟡</button>
+    <button id="btnEraser" title="지우개">🧹</button>
+    <button id="btnClear" title="전체 지우기">🗑️</button>
   </div>
   <canvas id="canvas"></canvas>
-
-  <script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    let drawing = false;
-    let color = '#ffffff';
-    let size = 6;
-    let isEraser = false;
-
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resize);
-    resize();
-
-    function start(e) {
-      drawing = true;
-      ctx.beginPath();
-      const pt = getPt(e);
-      ctx.moveTo(pt.x, pt.y);
-    }
-    function draw(e) {
-      if (!drawing) return;
-      const pt = getPt(e);
-      ctx.strokeStyle = isEraser ? '#1e293b' : color;
-      ctx.lineWidth = isEraser ? 30 : (size * (pt.pressure || 1));
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineTo(pt.x, pt.y);
-      ctx.stroke();
-    }
-    function end() { drawing = false; }
-    function getPt(e) {
-      const p = e.touches ? e.touches[0] : e;
-      return { x: p.clientX, y: p.clientY, pressure: e.pressure || 1 };
-    }
-
-    canvas.addEventListener('pointerdown', start);
-    canvas.addEventListener('pointermove', draw);
-    canvas.addEventListener('pointerup', end);
-
-    document.getElementById('btnPen').onclick = () => { isEraser = false; color = '#ffffff'; };
-    document.getElementById('btnRed').onclick = () => { isEraser = false; color = '#ef4444'; };
-    document.getElementById('btnYellow').onclick = () => { isEraser = false; color = '#facc15'; };
-    document.getElementById('btnEraser').onclick = () => { isEraser = true; };
-    document.getElementById('btnClear').onclick = () => { ctx.clearRect(0,0,canvas.width,canvas.height); };
-  </script>
+  <script src="script.js"></script>
 </body>
-</html>`;
+</html>`
+  },
+  {
+    name: 'script.js',
+    content: `const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let drawing = false;
+let color = '#ffffff';
+let isEraser = false;
 
-// 2. 기숙사 벌점 신속 입력 템플릿
-const TEMPLATE_DORMITORY = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>기숙사 신속 벌점 등록</title>
-  <style>
-    body { font-family: sans-serif; background: #f8fafc; padding: 24px; color: #1e293b; margin: 0; }
-    .card { max-width: 500px; margin: 0 auto; background: #fff; padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
-    h2 { margin-top: 0; color: #0f172a; }
-    .field { margin-bottom: 14px; }
-    label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 4px; color: #64748b; }
-    input, select, textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; }
-    button { width: 100%; padding: 12px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
-    button:hover { background: #1d4ed8; }
-    #log { margin-top: 20px; font-size: 13px; border-top: 1px solid #e2e8f0; padding-top: 12px; }
-    .log-item { background: #fee2e2; color: #991b1b; padding: 8px; border-radius: 6px; margin-bottom: 6px; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h2>🏠 기숙사 벌점 신속 배부 (핫스왑 버전)</h2>
-    <div class="field">
-      <label>호실 및 학번</label>
-      <input id="student" placeholder="예: 301호 홍길동 (10101)">
-    </div>
-    <div class="field">
-      <label>위반 사유</label>
-      <select id="reason">
-        <option>점호 시간 지각 (1점)</option>
-        <option>취침 후 전자기기 사용 (2점)</option>
-        <option>기숙사 내 음식물 반입 (3점)</option>
-      </select>
-    </div>
-    <button onclick="addLog()">벌점 즉시 등록</button>
-    <div id="log"><strong>최근 등록 내역:</strong></div>
-  </div>
-  <script>
-    function addLog() {
-      const s = document.getElementById('student').value;
-      const r = document.getElementById('reason').value;
-      if (!s) return alert('학생 정보를 입력하세요');
-      const div = document.createElement('div');
-      div.className = 'log-item';
-      div.textContent = '⚡ ' + s + ' - ' + r + ' (' + new Date().toLocaleTimeString() + ')';
-      document.getElementById('log').appendChild(div);
-      document.getElementById('student').value = '';
-    }
-  </script>
-</body>
-</html>`;
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function start(e) {
+  drawing = true;
+  ctx.beginPath();
+  const p = getPt(e);
+  ctx.moveTo(p.x, p.y);
+}
+function draw(e) {
+  if (!drawing) return;
+  const p = getPt(e);
+  ctx.strokeStyle = isEraser ? '#0f172a' : color;
+  ctx.lineWidth = isEraser ? 36 : (6 * (p.pressure || 1));
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+}
+function end() { drawing = false; }
+function getPt(e) {
+  const p = e.touches ? e.touches[0] : e;
+  return { x: p.clientX, y: p.clientY, pressure: e.pressure || 1 };
+}
+
+canvas.addEventListener('pointerdown', start);
+canvas.addEventListener('pointermove', draw);
+canvas.addEventListener('pointerup', end);
+
+document.getElementById('btnPen').onclick = () => { isEraser = false; color = '#ffffff'; };
+document.getElementById('btnRed').onclick = () => { isEraser = false; color = '#ef4444'; };
+document.getElementById('btnYellow').onclick = () => { isEraser = false; color = '#facc15'; };
+document.getElementById('btnEraser').onclick = () => { isEraser = true; };
+document.getElementById('btnClear').onclick = () => { ctx.clearRect(0,0,canvas.width,canvas.height); };`
+  },
+  {
+    name: 'style.css',
+    content: `body {
+  margin: 0;
+  background: #0f172a;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+#toolbar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 41, 59, 0.85);
+  backdrop-filter: blur(8px);
+  padding: 6px 14px;
+  border-radius: 20px;
+  display: flex;
+  gap: 8px;
+  border: 1px solid #334155;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  z-index: 10;
+}
+button {
+  background: #334155;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+button:hover, button.active {
+  background: #2563eb;
+  transform: scale(1.05);
+}
+canvas {
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+}`
+  }
+];
 
 export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
   isOpen,
@@ -141,66 +154,149 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
   plugins
 }) => {
   const [selectedPluginId, setSelectedPluginId] = useState<string>('whiteboard');
-  const [code, setCode] = useState<string>(TEMPLATE_WHITEBOARD);
+  const [files, setFiles] = useState<VirtualFile[]>(DEFAULT_FILES);
+  const [activeFileName, setActiveFileName] = useState<string>('index.html');
   const [previewKey, setPreviewKey] = useState<number>(0);
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [deviceMode, setDeviceMode] = useState<'desktop' | 'whiteboard'>('desktop');
+  const [statusToast, setStatusToast] = useState<string | null>(null);
 
-  // 선택된 플러그인이 변경될 때 기존 핫스왑 코드 불러오기
+  const showToast = (msg: string) => {
+    setStatusToast(msg);
+    setTimeout(() => setStatusToast(null), 3000);
+  };
+
+  const currentPlugin = plugins.find(p => p.id === selectedPluginId) || plugins[0];
+
   useEffect(() => {
-    const target = plugins.find(p => p.id === selectedPluginId);
-    if (target && target.customCode) {
-      setCode(target.customCode);
-    } else if (selectedPluginId === 'whiteboard') {
-      setCode(TEMPLATE_WHITEBOARD);
-    } else if (selectedPluginId === 'dormitory-penalty') {
-      setCode(TEMPLATE_DORMITORY);
+    if (currentPlugin) {
+      if (currentPlugin.files && currentPlugin.files.length > 0) {
+        setFiles(currentPlugin.files);
+        setActiveFileName(currentPlugin.files[0].name);
+      } else if (currentPlugin.customCode) {
+        setFiles([
+          { name: 'index.html', content: currentPlugin.customCode },
+          { name: 'script.js', content: '// script' },
+          { name: 'style.css', content: '/* css */' }
+        ]);
+        setActiveFileName('index.html');
+      } else {
+        setFiles(DEFAULT_FILES);
+        setActiveFileName('index.html');
+      }
     }
-  }, [selectedPluginId, plugins]);
+  }, [selectedPluginId]);
 
   if (!isOpen) return null;
 
-  const currentTarget = plugins.find(p => p.id === selectedPluginId);
+  const activeFile = files.find(f => f.name === activeFileName) || files[0];
 
-  // 1. 우측 프리뷰 실행 (런타임 테스트)
-  const handleRunTest = () => {
+  const handleContentChange = (newContent: string) => {
+    setFiles(prev => prev.map(f => f.name === activeFileName ? { ...f, content: newContent } : f));
+  };
+
+  // HTML + CSS + JS 인메모리 결합
+  const buildCombinedCode = (): string => {
+    const htmlFile = files.find(f => f.name.endsWith('.html')) || files[0];
+    const cssFile = files.find(f => f.name.endsWith('.css'));
+    const jsFile = files.find(f => f.name.endsWith('.js'));
+
+    let html = htmlFile ? htmlFile.content : '';
+    if (cssFile && !html.includes(cssFile.content)) {
+      html = html.replace('</head>', `<style>${cssFile.content}</style></head>`);
+      html = html.replace('<link rel="stylesheet" href="style.css">', '');
+    }
+    if (jsFile && !html.includes(jsFile.content)) {
+      html = html.replace('</body>', `<script>${jsFile.content}</script></body>`);
+      html = html.replace('<script src="script.js"></script>', '');
+    }
+    return html;
+  };
+
+  // 1. 실시간 실행 테스트
+  const handleRun = () => {
     setPreviewKey(prev => prev + 1);
   };
 
-  // 2. [기존 앱으로 즉시 교체 (Hot-Swap)]
-  const handleApplyHotSwap = async () => {
-    if (!confirm(`'${currentTarget?.name || selectedPluginId}' 앱을 현재 입력한 코드로 즉시 교체하시겠습니까?\n\n빌드나 배포 없이 실시간으로 모든 사용자에게 적용됩니다.`)) {
-      return;
-    }
-    setIsProcessing(true);
-    setSaveSuccessMsg(null);
+  // 2. [Fork] 안전한 복제본 생성
+  const handleFork = async () => {
+    const newId = `${currentPlugin.id}-dev-${Date.now().toString().slice(-4)}`;
+    const newName = `${currentPlugin.name} (테스트)`;
     try {
-      await hotSwapPluginCode(selectedPluginId, code);
-      setSaveSuccessMsg(`'${currentTarget?.name || selectedPluginId}' 앱이 성공적으로 핫스왑 교체되었습니다!`);
-      setTimeout(() => setSaveSuccessMsg(null), 4000);
-    } catch (err: any) {
-      alert('저장 실패: ' + err?.message);
-    } finally {
-      setIsProcessing(false);
+      await forkPlugin(currentPlugin, newId, newName);
+      setSelectedPluginId(newId);
+      showToast('새로운 테스트 플러그인으로 복제되었습니다.');
+    } catch (e: any) {
+      alert('복제 실패: ' + e?.message);
     }
   };
 
-  // 3. [정적 빌드 버전으로 복원]
-  const handleResetToDefault = async () => {
-    if (!confirm(`'${currentTarget?.name}'의 핫스왑 코드를 삭제하고, 기본 정식 빌드 버전으로 원복하시겠습니까?`)) {
-      return;
-    }
-    setIsProcessing(true);
+  // 3. [Promote] 기존 운영 플러그인으로 핫스왑 승격
+  const handlePromote = async () => {
+    const targetId = currentPlugin.id.includes('-dev-')
+      ? currentPlugin.id.split('-dev-')[0]
+      : currentPlugin.id;
+
+    if (!confirm(`'${targetId}' 정식 운영 앱으로 즉시 교체하시겠습니까?`)) return;
+
     try {
-      await resetPluginToBuildVersion(selectedPluginId);
-      setCode(selectedPluginId === 'whiteboard' ? TEMPLATE_WHITEBOARD : TEMPLATE_DORMITORY);
-      alert('정식 빌드 버전으로 원복되었습니다.');
-    } catch (err: any) {
-      alert('원복 실패: ' + err?.message);
-    } finally {
-      setIsProcessing(false);
+      const combined = buildCombinedCode();
+      const payload: AppPlugin = {
+        ...currentPlugin,
+        files,
+        customCode: combined,
+        codeType: 'inline_html',
+        version: `1.${Date.now().toString().slice(-3)}`
+      };
+      await promoteForkToProduction(payload, targetId, '코드 스튜디오 승격');
+      await savePluginFiles(currentPlugin.id, files, combined);
+      showToast('운영 앱으로 즉시 승격 교체 완료!');
+    } catch (e: any) {
+      alert('승격 실패: ' + e?.message);
     }
+  };
+
+  // 4. [Rollback]
+  const handleRollback = async (dep: PluginDeployment) => {
+    if (!confirm(`'${dep.version}' 시점으로 롤백하시겠습니까?`)) return;
+    try {
+      await rollbackDeployment(currentPlugin.id, dep);
+      setFiles(dep.files);
+      setIsHistoryOpen(false);
+      handleRun();
+      showToast(`버전 ${dep.version}으로 복원되었습니다.`);
+    } catch (e: any) {
+      alert('롤백 실패: ' + e?.message);
+    }
+  };
+
+  // 5. [Delete] 복제본 삭제
+  const handleDeleteCurrent = async () => {
+    if (!confirm(`'${currentPlugin.name}' 플러그인을 삭제하시겠습니까?`)) return;
+    try {
+      await deletePlugin(currentPlugin.id);
+      setSelectedPluginId('whiteboard');
+      showToast('플러그인이 삭제되었습니다.');
+    } catch (e: any) {
+      alert('삭제 실패: ' + e?.message);
+    }
+  };
+
+  // 6. [Restore to static build]
+  const handleRestoreStatic = async () => {
+    if (!confirm('정식 빌드본으로 원복하시겠습니까?')) return;
+    try {
+      await resetPluginToBuildVersion(currentPlugin.id);
+      showToast('기본 정적 빌드본으로 복원되었습니다.');
+    } catch (e: any) {
+      alert('복원 실패: ' + e?.message);
+    }
+  };
+
+  const getTabIcon = (name: string) => {
+    if (name.endsWith('.html')) return <Code2 size={14} color="#f97316" />;
+    if (name.endsWith('.css')) return <Palette size={14} color="#38bdf8" />;
+    return <FileCode size={14} color="#facc15" />;
   };
 
   return (
@@ -210,194 +306,286 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
       left: 0,
       width: '100vw',
       height: '100vh',
-      backgroundColor: 'rgba(15, 23, 42, 0.75)',
+      backgroundColor: 'rgba(15, 23, 42, 0.8)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 9999,
-      backdropFilter: 'blur(6px)'
+      backdropFilter: 'blur(8px)'
     }}>
       <div style={{
-        backgroundColor: '#fff',
-        width: '96vw',
-        height: '92vh',
+        backgroundColor: '#0f172a',
+        width: '98vw',
+        height: '96vh',
         borderRadius: '16px',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+        border: '1px solid #334155',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
       }}>
-        {/* 상단 헤더 */}
+        {/* 상단 미니멀 툴바 */}
         <div style={{
-          padding: '16px 24px',
-          borderBottom: '1px solid #e2e8f0',
+          height: '48px',
+          padding: '0 16px',
+          borderBottom: '1px solid #1e293b',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          backgroundColor: '#0f172a',
-          color: '#fff'
+          backgroundColor: '#090d16'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ padding: '8px', backgroundColor: '#3b82f6', borderRadius: '8px', display: 'flex' }}>
-              <Code2 size={22} color="#fff" />
-            </div>
-            <div>
-              <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                플러그인 실시간 코드 스튜디오 (Live Code & Hot-Swap Studio)
-                <span style={{ fontSize: '11px', backgroundColor: '#f59e0b', color: '#78350f', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
-                  무배포 실시간 핫스왑
-                </span>
-              </h2>
-              <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0' }}>
-                배포 없이 여기서 직접 코드를 작성하고 우측에서 실시간 테스트한 후, 클릭 한 번으로 기존 앱을 즉각 교체하세요.
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer', padding: '6px' }}
-          >
-            <X size={24} />
-          </button>
-        </div>
-
-        {/* 제어 툴바 */}
-        <div style={{
-          padding: '12px 24px',
-          backgroundColor: '#f8fafc',
-          borderBottom: '1px solid #e2e8f0',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '12px'
-        }}>
-          {/* 타깃 플러그인 선택 */}
+          {/* 좌측: 플러그인 선택 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>교체/업그레이드 대상 앱:</span>
+            <Code2 size={20} color="#38bdf8" />
             <select
               value={selectedPluginId}
               onChange={(e) => setSelectedPluginId(e.target.value)}
-              style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold', color: '#1e293b' }}
+              style={{
+                backgroundColor: '#1e293b',
+                color: '#e2e8f0',
+                border: '1px solid #334155',
+                borderRadius: '6px',
+                padding: '4px 10px',
+                fontSize: '13px',
+                fontWeight: 600,
+                outline: 'none',
+                cursor: 'pointer'
+              }}
             >
               {plugins.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.id}) {p.codeType === 'inline_html' ? '⚡ 핫스왑 운용중' : '📦 정적 빌드본'}
+                  {p.name} ({p.id}) {p.codeType === 'inline_html' ? '⚡' : '📦'}
                 </option>
               ))}
             </select>
 
-            {/* 템플릿 로드 버튼 */}
-            <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: '12px' }}>템플릿 불러오기:</span>
+            {statusToast && (
+              <span style={{ fontSize: '12px', color: '#4ade80', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <CheckCircle2 size={14} /> {statusToast}
+              </span>
+            )}
+          </div>
+
+          {/* 중앙: 뷰포트 토글 */}
+          <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#1e293b', borderRadius: '8px', padding: '2px', border: '1px solid #334155' }}>
             <button
-              onClick={() => setCode(TEMPLATE_WHITEBOARD)}
-              style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              onClick={() => setDeviceMode('desktop')}
+              title="데스크톱 뷰 (PC / 모니터)"
+              style={{
+                border: 'none',
+                background: deviceMode === 'desktop' ? '#334155' : 'transparent',
+                color: deviceMode === 'desktop' ? '#38bdf8' : '#94a3b8',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center'
+              }}
             >
-              칠판 필기 템플릿
+              <Monitor size={15} />
             </button>
             <button
-              onClick={() => setCode(TEMPLATE_DORMITORY)}
-              style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              onClick={() => setDeviceMode('whiteboard')}
+              title="전자칠판 와이드 뷰 (16:9 규격)"
+              style={{
+                border: 'none',
+                background: deviceMode === 'whiteboard' ? '#334155' : 'transparent',
+                color: deviceMode === 'whiteboard' ? '#38bdf8' : '#94a3b8',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center'
+              }}
             >
-              기숙사 벌점 템플릿
+              <Tablet size={15} />
             </button>
           </div>
 
-          {/* 성공 메시지 */}
-          {saveSuccessMsg && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#15803d', fontSize: '13px', fontWeight: 'bold' }}>
-              <CheckCircle2 size={16} />
-              <span>{saveSuccessMsg}</span>
-            </div>
-          )}
-
-          {/* 주요 동작 버튼 */}
-          <div style={{ display: 'flex', gap: '10px' }}>
+          {/* 우측: 직관적 벡터 액션 아이콘 모음 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <button
-              onClick={handleRunTest}
+              onClick={handleRun}
+              title="실시간 테스트 실행 (우측 샌드박스 새로고침)"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '8px 16px',
+                padding: '6px 14px',
                 backgroundColor: '#0284c7',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
+                fontSize: '12px',
                 fontWeight: 'bold',
-                fontSize: '13px',
                 cursor: 'pointer'
               }}
             >
-              <Play size={16} /> 실시간 테스트 실행
+              <Play size={14} fill="#fff" />
+              <span>실행</span>
             </button>
 
             <button
-              onClick={handleApplyHotSwap}
-              disabled={isProcessing}
+              onClick={handleFork}
+              title="안전한 테스트 플러그인으로 복제 (Fork)"
+              style={{
+                padding: '7px 10px',
+                backgroundColor: '#1e293b',
+                color: '#cbd5e1',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <Copy size={16} />
+            </button>
+
+            <button
+              onClick={handlePromote}
+              title="기존 운영 앱으로 승격 및 교체 (Hot-Swap Promote)"
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '8px 20px',
+                gap: '5px',
+                padding: '6px 14px',
                 backgroundColor: '#16a34a',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
+                fontSize: '12px',
                 fontWeight: 'bold',
-                fontSize: '13px',
-                cursor: isProcessing ? 'not-allowed' : 'pointer',
-                boxShadow: '0 2px 8px rgba(22, 163, 74, 0.4)'
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(22, 163, 74, 0.4)'
               }}
             >
-              <Zap size={16} /> {isProcessing ? '교체 중...' : '기존 앱에 즉시 핫스왑 교체'}
+              <Zap size={14} fill="#fff" />
+              <span>교체 승격</span>
             </button>
 
-            {currentTarget?.codeType === 'inline_html' && (
+            <button
+              onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+              title="버전 배포 히스토리 및 롤백"
+              style={{
+                padding: '7px 10px',
+                backgroundColor: isHistoryOpen ? '#334155' : '#1e293b',
+                color: isHistoryOpen ? '#38bdf8' : '#cbd5e1',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <History size={16} />
+            </button>
+
+            {currentPlugin.codeType === 'inline_html' && (
               <button
-                onClick={handleResetToDefault}
+                onClick={handleRestoreStatic}
+                title="기본 정식 빌드본으로 복원"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 12px',
-                  backgroundColor: '#fff',
-                  color: '#64748b',
-                  border: '1px solid #cbd5e1',
+                  padding: '7px 10px',
+                  backgroundColor: '#1e293b',
+                  color: '#94a3b8',
+                  border: '1px solid #334155',
                   borderRadius: '8px',
-                  fontSize: '12px',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center'
                 }}
-                title="입력한 코드를 지우고 원래 정식 빌드된 버전으로 복원"
               >
-                <RotateCcw size={14} /> 빌드본 복원
+                <RotateCcw size={16} />
               </button>
             )}
+
+            {currentPlugin.id.includes('-dev-') && (
+              <button
+                onClick={handleDeleteCurrent}
+                title="복제본 플러그인 영구 삭제"
+                style={{
+                  padding: '7px 10px',
+                  backgroundColor: '#1e293b',
+                  color: '#ef4444',
+                  border: '1px solid #334155',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+
+            <div style={{ width: '1px', height: '20px', backgroundColor: '#334155', margin: '0 4px' }} />
+
+            <button
+              onClick={onClose}
+              title="닫기"
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: '#94a3b8',
+                padding: '6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <X size={18} />
+            </button>
           </div>
         </div>
 
-        {/* 메인 2분할 뷰: 좌측 에디터 + 우측 샌드박스 프리뷰 */}
-        <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-          {/* 1. 좌측: 실시간 코드 에디터 */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #e2e8f0' }}>
+        {/* 메인 작업 영역: 좌측 파일 에디터 + 우측 샌드박스 프리뷰 */}
+        <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
+          {/* 1. 좌측: 파일 탭 + 코드 에디터 */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #1e293b' }}>
+            {/* 파일 탭 바 */}
             <div style={{
-              padding: '8px 16px',
-              backgroundColor: '#1e293b',
-              color: '#94a3b8',
-              fontSize: '12px',
-              fontWeight: 'bold',
+              height: '36px',
+              backgroundColor: '#0b0f19',
+              borderBottom: '1px solid #1e293b',
               display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
+              alignItems: 'center',
+              padding: '0 8px',
+              gap: '2px',
+              overflowX: 'auto'
             }}>
-              <span>✏️ 소스 코드 에디터 (HTML / CSS / JS 통합 지원)</span>
-              <span style={{ fontSize: '11px', color: '#64748b' }}>Ctrl+A 후 새 코드를 붙여넣으셔도 됩니다</span>
+              {files.map((f) => {
+                const active = f.name === activeFileName;
+                return (
+                  <button
+                    key={f.name}
+                    onClick={() => setActiveFileName(f.name)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 12px',
+                      borderRadius: '6px 6px 0 0',
+                      border: 'none',
+                      backgroundColor: active ? '#1e293b' : 'transparent',
+                      color: active ? '#f8fafc' : '#94a3b8',
+                      fontSize: '12px',
+                      fontFamily: 'monospace',
+                      fontWeight: active ? 'bold' : 'normal',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {getTabIcon(f.name)}
+                    <span>{f.name}</span>
+                  </button>
+                );
+              })}
             </div>
+
+            {/* 코드 작성 에디터 */}
             <textarea
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="여기에 직접 HTML, CSS, JavaScript 코드를 입력하거나 붙여넣으세요..."
+              value={activeFile?.content || ''}
+              onChange={(e) => handleContentChange(e.target.value)}
               style={{
                 flex: 1,
                 width: '100%',
@@ -405,7 +593,7 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
                 border: 'none',
                 outline: 'none',
                 backgroundColor: '#0f172a',
-                color: '#e2e8f0',
+                color: '#f1f5f9',
                 fontFamily: 'Consolas, Monaco, "Courier New", monospace',
                 fontSize: '13px',
                 lineHeight: 1.6,
@@ -418,32 +606,29 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
             />
           </div>
 
-          {/* 2. 우측: 실시간 샌드박스 테스트기 (Iframe Sandbox) */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f1f5f9' }}>
+          {/* 2. 우측: 실시간 독립 샌드박스 프리뷰 */}
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: '#020617',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden'
+          }}>
             <div style={{
-              padding: '8px 16px',
-              backgroundColor: '#e2e8f0',
-              color: '#334155',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
+              width: deviceMode === 'whiteboard' ? '92%' : '100%',
+              height: deviceMode === 'whiteboard' ? '88%' : '100%',
+              borderRadius: deviceMode === 'whiteboard' ? '12px' : 0,
+              overflow: 'hidden',
+              boxShadow: deviceMode === 'whiteboard' ? '0 10px 30px rgba(0,0,0,0.6)' : 'none',
+              border: deviceMode === 'whiteboard' ? '1px solid #334155' : 'none'
             }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Play size={14} color="#0284c7" />
-                실시간 독립 샌드박스 실행기 (실제 마우스/펜 필기 테스트)
-              </span>
-              <span style={{ fontSize: '11px', color: '#64748b' }}>격리 환경(Sandbox)에서 안전하게 구동</span>
-            </div>
-
-            <div style={{ flex: 1, position: 'relative' }}>
               <iframe
                 key={previewKey}
-                ref={iframeRef}
-                srcDoc={code}
-                title="Live Plugin Preview"
-                sandbox="allow-scripts allow-modals allow-same-origin"
+                srcDoc={buildCombinedCode()}
+                title="Sandbox Preview"
+                sandbox="allow-scripts allow-modals allow-same-origin allow-forms"
                 style={{
                   width: '100%',
                   height: '100%',
@@ -453,25 +638,71 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
               />
             </div>
           </div>
-        </div>
 
-        {/* 하단 상태 가이드 */}
-        <div style={{
-          padding: '8px 24px',
-          backgroundColor: '#f8fafc',
-          borderTop: '1px solid #e2e8f0',
-          fontSize: '12px',
-          color: '#64748b',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
-          <div>
-            💡 <strong>사용 방법:</strong> 코드를 수정하고 <strong>[실시간 테스트 실행]</strong>을 누르면 우측에서 바로 작동합니다. 정상 동작이 확인되면 <strong>[기존 앱에 즉시 핫스왑 교체]</strong>를 누르세요.
-          </div>
-          <div>
-            현재 대상: <strong>{currentTarget?.name}</strong> | 실행 규격: <strong>{currentTarget?.codeType === 'inline_html' ? '⚡ 핫스왑 코드' : '📦 정적 빌드 파일'}</strong>
-          </div>
+          {/* 3. 버전 히스토리 오버레이 드로어 */}
+          {isHistoryOpen && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              width: '320px',
+              height: '100%',
+              backgroundColor: '#090d16',
+              borderLeft: '1px solid #1e293b',
+              display: 'flex',
+              flexDirection: 'column',
+              zIndex: 20
+            }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#e2e8f0' }}>배포 스냅샷 버전</span>
+                <button onClick={() => setIsHistoryOpen(false)} style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer' }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {!currentPlugin.deployments || currentPlugin.deployments.length === 0 ? (
+                  <span style={{ fontSize: '12px', color: '#64748b', textAlign: 'center', marginTop: '20px' }}>보관된 이전 버전이 없습니다</span>
+                ) : (
+                  currentPlugin.deployments.map((dep, idx) => (
+                    <div
+                      key={dep.version + idx}
+                      style={{
+                        padding: '10px',
+                        backgroundColor: '#1e293b',
+                        borderRadius: '8px',
+                        border: '1px solid #334155',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#38bdf8' }}>v{dep.version}</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{new Date(dep.deployedAt).toLocaleString()}</div>
+                      </div>
+
+                      <button
+                        onClick={() => handleRollback(dep)}
+                        title="이 버전으로 롤백 복원"
+                        style={{
+                          border: 'none',
+                          background: '#0284c7',
+                          color: '#fff',
+                          padding: '6px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          display: 'flex'
+                        }}
+                      >
+                        <RotateCcw size={14} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

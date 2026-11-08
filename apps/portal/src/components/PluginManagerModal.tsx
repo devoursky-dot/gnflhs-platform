@@ -85,20 +85,15 @@ export const PluginManagerModal: React.FC<PluginManagerModalProps> = ({
         boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
       }}>
         {/* 헤더 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Puzzle size={24} color="#7c3aed" />
-            <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>플러그인 동적 관리자 (모듈 장착/해제/배포)</h2>
+            <Puzzle size={20} color="#7c3aed" />
+            <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b', margin: 0 }}>플러그인 모듈 관리</h2>
           </div>
-          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
-            <X size={20} color="#64748b" />
+          <button onClick={onClose} title="닫기" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}>
+            <X size={18} color="#64748b" />
           </button>
         </div>
-
-        {/* 안내문 */}
-        <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px', lineHeight: 1.5 }}>
-          여기서 플러그인의 상태를 변경하면, 메인 포털 코드를 다시 배포하지 않고도 실시간으로 모든 사용자 및 전자칠판의 화면에 모듈이 장착되거나 해제됩니다.
-        </p>
 
         {/* 플러그인 리스트 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
@@ -146,8 +141,12 @@ export const PluginManagerModal: React.FC<PluginManagerModalProps> = ({
               {/* 상태 토글 버튼 */}
               <button
                 onClick={() => handleToggleStatus(p)}
+                title="상태 전환 (정식 운영 ➔ 개발 테스트 ➔ 비활성화)"
                 style={{
-                  padding: '8px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
                   borderRadius: '8px',
                   border: '1px solid #cbd5e1',
                   backgroundColor: '#fff',
@@ -156,7 +155,8 @@ export const PluginManagerModal: React.FC<PluginManagerModalProps> = ({
                   cursor: 'pointer'
                 }}
               >
-                상태 전환 (클릭)
+                <RefreshCw size={12} color="#64748b" />
+                <span>상태 전환</span>
               </button>
             </div>
           ))}

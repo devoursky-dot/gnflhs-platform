@@ -1,0 +1,36 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == "devoursky@gmail.com";
+    }
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 1. 공용 폴더
+    match /shared/{allPaths=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // 2. 플러그인 격리 폴더
+    match /plugins/{pluginId}/{allPaths=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // 3. 사용자 개인 폴더
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if isAuthenticated() && (request.auth.uid == userId || isSuperAdmin());
+    }
+
+    // 4. 시스템/관리자 전용 폴더
+    match /system/{allPaths=**} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    // 기본 규칙
+    match /{allPaths=**} {
+      allow read, write: if isSuperAdmin();
+    }
+  }
+}
