@@ -12,6 +12,9 @@
     "dev:whiteboard": "npm --prefix apps/whiteboard-note run dev",
     "dev:dormitory": "npm --prefix apps/dormitory-penalty run dev",
     "build:all": "node scripts/build-and-bundle.mjs",
-    "deploy:firebase": "npm run build:all && npx firebase-tools deploy --only hosting,firestore"
+    "deploy:firebase": "npm run build:all && npx firebase-tools deploy --only hosting,firestore",
+    "sync:push": "node scripts/sync-plugins.mjs push",
+    "sync:pull": "node scripts/sync-plugins.mjs pull",
+    "sync:list": "node scripts/sync-plugins.mjs list"
   }
 }

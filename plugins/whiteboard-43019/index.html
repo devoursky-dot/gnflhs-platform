@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="toolbar">
+    <button id="btnPen" class="active" title="펜">✏️</button>
+    <button id="btnRed" title="빨강">🔴</button>
+    <button id="btnYellow" title="노랑">🟡</button>
+    <button id="btnBlue" data-tier="detail" title="파랑 (보조)">🔵</button>
+    <button id="btnGrid" data-tier="pc-only" title="모눈 배경 토글 (PC 전용)">📐</button>
+    <button id="btnEraser" title="지우개">🧹</button>
+    <button id="btnClear" title="전체 지우기">🗑️</button>
+    <span id="deviceBadge" class="badge" data-tier="detail"></span>
+  </div>
+  <canvas id="canvas"></canvas>
+  <script src="script.js"></script>
+</body>
+</html>

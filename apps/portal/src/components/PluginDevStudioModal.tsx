@@ -130,8 +130,7 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
   const [showLibPicker, setShowLibPicker] = useState<boolean>(false);
 
   // 뷰포트 & 실행 로그 & 캐시
-  const [previewDevice, setPreviewDevice] = useState<DeviceViewportType>('pc');
-  const [previewKey, setPreviewKey] = useState<number>(0);
+  const [showBottomLogs, setShowBottomLogs] = useState<boolean>(false);
   const [logs, setLogs] = useState<ExecutionLogItem[]>([]);
   const [cacheEntries, setCacheEntries] = useState<CacheEntryInfo[]>([]);
   const [statusToast, setStatusToast] = useState<string | null>(null);
@@ -315,7 +314,6 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
     try {
       const saved = await saveStudioProject(snap);
       setIsDirty(false);
-      setPreviewKey((k) => k + 1);
       showToast('저장됨');
       return saved;
     } catch (e: any) {
@@ -623,39 +621,6 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
     showToast('배포본 삭제됨');
   };
 
-  const compiledPreviewHtml = useMemo(() => {
-    if (!isOpen) return '';
-    return compileStudioBundle({
-      projectId: currentScopeId,
-      projectName: projectName || 'Preview',
-      files,
-      scriptProperties: scriptProps,
-      globalProperties: globalPropsDraft,
-      libraries,
-      runtimeConfig,
-      forcedDevice: previewDevice,
-      currentUser: currentUser
-        ? {
-            email: currentUser.email,
-            displayName: currentUser.displayName,
-            isSuperAdmin: isSuperAdmin(currentUser)
-          }
-        : null
-    });
-  }, [
-    isOpen,
-    currentScopeId,
-    projectName,
-    files,
-    scriptProps,
-    globalPropsDraft,
-    libraries,
-    runtimeConfig,
-    previewDevice,
-    currentUser,
-    previewKey
-  ]);
-
   if (!isOpen) return null;
 
   const getFileIcon = (name: string) => {
@@ -875,162 +840,109 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
             )}
           </div>
 
-          {/* 중앙: 인라인 샌드박스 뷰포트 전환 (PC · 태블릿 · 스마트폰) + 새로고침 + 캐시 초기화 */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '2px',
-            backgroundColor: '#1e293b',
-            padding: '2px',
-            borderRadius: '8px',
-            border: '1px solid #334155'
-          }}>
+          {/* 우측: 테스트 실행 + 기기별 새 탭 실행 + 캐시 초기화 + 배포 + 닫기 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
-              onClick={() => setPreviewDevice('pc')}
-              title="인라인 미리보기: PC (전체 표시)"
+              onClick={() => handleRunInNewTab('pc')}
+              title="새 탭에서 테스트 실행 (PC 전체 화면)"
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '8px',
                 border: 'none',
-                background: previewDevice === 'pc' ? '#334155' : 'transparent',
-                color: previewDevice === 'pc' ? '#38bdf8' : '#94a3b8',
-                padding: '5px 8px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                display: 'flex'
+                backgroundColor: '#0284c7',
+                color: '#fff',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer'
               }}
             >
-              <Monitor size={15} />
+              <Play size={14} fill="#fff" />
+              <span>실행</span>
             </button>
-            <button
-              onClick={() => setPreviewDevice('tablet')}
-              title="인라인 미리보기: 태블릿 (768px)"
+
+            <div
+              title="기기 규격별 새 탭 테스트"
               style={{
-                border: 'none',
-                background: previewDevice === 'tablet' ? '#334155' : 'transparent',
-                color: previewDevice === 'tablet' ? '#38bdf8' : '#94a3b8',
-                padding: '5px 8px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                display: 'flex'
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+                backgroundColor: '#1e293b',
+                padding: '2px',
+                borderRadius: '8px',
+                border: '1px solid #334155'
               }}
             >
-              <Tablet size={15} />
-            </button>
-            <button
-              onClick={() => setPreviewDevice('mobile')}
-              title="인라인 미리보기: 스마트폰 (390px)"
-              style={{
-                border: 'none',
-                background: previewDevice === 'mobile' ? '#334155' : 'transparent',
-                color: previewDevice === 'mobile' ? '#38bdf8' : '#94a3b8',
-                padding: '5px 8px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                display: 'flex'
-              }}
-            >
-              <Smartphone size={15} />
-            </button>
-            <div style={{ width: '1px', height: '16px', backgroundColor: '#334155', margin: '0 2px' }} />
-            <button
-              onClick={() => setPreviewKey((k) => k + 1)}
-              title="인라인 미리보기 실행"
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: '#4ade80',
-                padding: '5px 8px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                display: 'flex'
-              }}
-            >
-              <Play size={14} fill="#4ade80" />
-            </button>
+              <button
+                onClick={() => handleRunInNewTab('pc')}
+                title="새 탭에서 PC용으로 실행 (전체 표시)"
+                style={{
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  color: '#38bdf8',
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'flex'
+                }}
+              >
+                <Monitor size={14} />
+              </button>
+              <button
+                onClick={() => handleRunInNewTab('tablet')}
+                title="새 탭에서 태블릿용으로 실행 (768×1024 표준)"
+                style={{
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  color: '#38bdf8',
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'flex'
+                }}
+              >
+                <Tablet size={14} />
+              </button>
+              <button
+                onClick={() => handleRunInNewTab('mobile')}
+                title="새 탭에서 스마트폰용으로 실행 (390×844 모바일)"
+                style={{
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  color: '#38bdf8',
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'flex'
+                }}
+              >
+                <Smartphone size={14} />
+              </button>
+            </div>
+
             <button
               onClick={() => {
                 clearProjectCache(currentScopeId);
                 refreshCacheInspector();
-                setPreviewKey((k) => k + 1);
                 showToast('캐시 초기화됨');
               }}
               title="프로젝트 런타임 캐시(CacheService) 비우기"
               style={{
-                border: 'none',
-                background: 'transparent',
+                border: '1px solid #334155',
+                backgroundColor: '#1e293b',
                 color: '#94a3b8',
-                padding: '5px 8px',
-                borderRadius: '6px',
+                padding: '6px 9px',
+                borderRadius: '8px',
                 cursor: 'pointer',
                 display: 'flex'
               }}
             >
               <Eraser size={14} />
             </button>
-          </div>
 
-          {/* 우측: 새 탭 디바이스별 실행 (PC / 태블릿 / 스마트폰) + 배포 관리 + 닫기 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div
-              title="미배포 프로젝트를 새 탭에서 기기별로 즉시 테스트 실행"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '2px',
-                backgroundColor: '#0f172a',
-                border: '1px solid #334155',
-                borderRadius: '8px',
-                padding: '2px 4px'
-              }}
-            >
-              <span style={{ fontSize: '11px', color: '#94a3b8', padding: '0 5px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-                <ExternalLink size={12} color="#38bdf8" /> 새탭
-              </span>
-              <button
-                onClick={() => handleRunInNewTab('pc')}
-                title="새 탭에서 PC용으로 실행"
-                style={{
-                  border: 'none',
-                  backgroundColor: '#1e293b',
-                  color: '#e2e8f0',
-                  padding: '5px 7px',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  display: 'flex'
-                }}
-              >
-                <Monitor size={13} />
-              </button>
-              <button
-                onClick={() => handleRunInNewTab('tablet')}
-                title="새 탭에서 태블릿용으로 실행"
-                style={{
-                  border: 'none',
-                  backgroundColor: '#1e293b',
-                  color: '#e2e8f0',
-                  padding: '5px 7px',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  display: 'flex'
-                }}
-              >
-                <Tablet size={13} />
-              </button>
-              <button
-                onClick={() => handleRunInNewTab('mobile')}
-                title="새 탭에서 스마트폰용으로 실행"
-                style={{
-                  border: 'none',
-                  backgroundColor: '#1e293b',
-                  color: '#e2e8f0',
-                  padding: '5px 7px',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  display: 'flex'
-                }}
-              >
-                <Smartphone size={13} />
-              </button>
-            </div>
+            <div style={{ width: '1px', height: '20px', backgroundColor: '#334155', margin: '0 2px' }} />
 
             <button
               onClick={() => setActiveSection('deployments')}
@@ -1452,18 +1364,19 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
               )}
 
               {/* 중앙: 코드 에디터 */}
+              {/* 중앙: 풀스크린 코드 에디터 (Apps Script 순정 스타일) */}
               <div style={{
                 flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
-                borderRight: '1px solid #1e293b',
-                minWidth: 0
+                minWidth: 0,
+                backgroundColor: isReadOnly ? '#0b1120' : '#0f172a'
               }}>
                 <div style={{
-                  height: '32px',
+                  height: '34px',
                   backgroundColor: '#0b0f19',
                   borderBottom: '1px solid #1e293b',
-                  padding: '0 12px',
+                  padding: '0 16px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -1471,13 +1384,37 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
                   fontFamily: 'Consolas, monospace',
                   color: '#cbd5e1'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {activeFile && getFileIcon(activeFile.name)}
-                    <span>{activeFile?.name}</span>
+                    <span style={{ fontWeight: 600 }}>{activeFile?.name}</span>
+                    <span style={{ color: '#64748b', fontSize: '11px' }}>
+                      ({(activeFile?.content || '').split('\n').length}줄)
+                    </span>
                   </div>
-                  <span style={{ fontSize: '10px', color: '#64748b' }}>
-                    V8 · {isReadOnly ? 'READ-ONLY' : isDirty ? 'UNSAVED' : 'SAVED'}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <button
+                      onClick={() => setShowBottomLogs((v) => !v)}
+                      title="하단 실행 로그 드로어 열기/닫기"
+                      style={{
+                        border: 'none',
+                        background: showBottomLogs ? '#1e293b' : 'transparent',
+                        color: logs.length > 0 ? '#38bdf8' : '#64748b',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      <Terminal size={12} />
+                      <span>실행 로그 {logs.length > 0 ? `(${logs.length})` : ''}</span>
+                    </button>
+                    <span style={{ fontSize: '10px', color: '#64748b' }}>
+                      V8 · {isReadOnly ? 'READ-ONLY' : isDirty ? 'UNSAVED' : 'SAVED'}
+                    </span>
+                  </div>
                 </div>
 
                 <textarea
@@ -1502,58 +1439,73 @@ export const PluginDevStudioModal: React.FC<PluginDevStudioModalProps> = ({
                   style={{
                     flex: 1,
                     width: '100%',
-                    padding: '16px',
+                    padding: '18px 24px',
                     border: 'none',
                     outline: 'none',
-                    backgroundColor: isReadOnly ? '#0b1120' : '#0f172a',
+                    backgroundColor: 'transparent',
                     color: '#f1f5f9',
                     fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-                    fontSize: '13px',
-                    lineHeight: 1.6,
+                    fontSize: '13.5px',
+                    lineHeight: 1.65,
                     resize: 'none',
                     boxSizing: 'border-box',
                     whiteSpace: 'pre',
                     overflow: 'auto'
                   }}
                 />
-              </div>
 
-              {/* 우측: 실시간 디바이스 반응형 샌드박스 프리뷰 */}
-              <div style={{
-                flex: 1,
-                backgroundColor: '#020617',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: previewDevice === 'pc' ? 0 : '14px',
-                overflow: 'hidden',
-                minWidth: 0
-              }}>
-                <div style={{
-                  width: previewDevice === 'pc' ? '100%' : previewDevice === 'tablet' ? '768px' : '390px',
-                  maxWidth: '100%',
-                  height: previewDevice === 'pc' ? '100%' : '94%',
-                  borderRadius: previewDevice === 'pc' ? 0 : previewDevice === 'tablet' ? '14px' : '22px',
-                  border: previewDevice === 'pc' ? 'none' : '4px solid #1e293b',
-                  boxShadow: previewDevice === 'pc' ? 'none' : '0 20px 50px rgba(0, 0, 0, 0.6)',
-                  overflow: 'hidden',
-                  backgroundColor: '#fff',
-                  transition: 'width 0.2s ease'
-                }}>
-                  <iframe
-                    key={`${previewKey}-${previewDevice}-${currentScopeId}`}
-                    srcDoc={compiledPreviewHtml}
-                    title="Studio Live Preview"
-                    sandbox="allow-scripts allow-modals allow-same-origin allow-forms"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      border: 'none',
-                      backgroundColor: '#fff'
-                    }}
-                  />
-                </div>
+                {/* 하단 접이식 실행 로그 드로어 */}
+                {showBottomLogs && (
+                  <div style={{
+                    height: '160px',
+                    backgroundColor: '#070b13',
+                    borderTop: '1px solid #1e293b',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    <div style={{
+                      padding: '4px 12px',
+                      backgroundColor: '#090d16',
+                      borderBottom: '1px solid #1e293b',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontSize: '11px',
+                      color: '#94a3b8'
+                    }}>
+                      <span>실행 로그 (Logger & Console)</span>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => setLogs([])} title="로그 비우기" style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', padding: '2px', display: 'flex' }}>
+                          <Eraser size={11} />
+                        </button>
+                        <button onClick={() => setShowBottomLogs(false)} title="로그 창 닫기" style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', padding: '2px', display: 'flex' }}>
+                          <X size={12} />
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{
+                      flex: 1,
+                      overflowY: 'auto',
+                      padding: '8px 14px',
+                      fontFamily: 'Consolas, monospace',
+                      fontSize: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      {logs.length === 0 ? (
+                        <span style={{ color: '#475569' }}>출력된 실행 로그가 없습니다. 상단 '실행' 버튼으로 새 탭에서 앱을 실행해 보세요.</span>
+                      ) : (
+                        logs.map((l, i) => (
+                          <div key={i} style={{ color: l.level === 'error' ? '#f87171' : l.level === 'warn' ? '#facc15' : '#cbd5e1' }}>
+                            <span style={{ color: '#475569', marginRight: '6px' }}>[{new Date(l.timestamp).toLocaleTimeString()}]</span>
+                            <span>{l.message}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

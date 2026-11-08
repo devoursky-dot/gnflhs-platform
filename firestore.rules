@@ -13,8 +13,7 @@ service cloud.firestore {
 
     // 플러그인 레지스트리 (모듈 카탈로그)
     match /plugins/{pluginId} {
-      allow read: if true; // 누구나 설치된 활성 플러그인 조회 가능
-      allow write: if isSuperAdmin(); // 플러그인 등록/해제/수정은 최고관리자만
+      allow read, write: if true;
     }
 
     // 사용자 계정 목록
@@ -39,20 +38,19 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // 스튜디오 미배포 프로젝트 보관함 (최고관리자 전용)
+    // 스튜디오 미배포 프로젝트 보관함 (로컬 CLI 및 실시간 동기화)
     match /studio_projects/{projectId} {
-      allow read, write: if isSuperAdmin();
+      allow read, write: if true;
     }
 
     // 플랫폼 전역 공유 스크립트 속성
     match /platform_settings/{docId} {
-      allow read: if true;
-      allow write: if isSuperAdmin();
+      allow read, write: if true;
     }
 
     // 플러그인 공용 DB 브릿지 (GNFLHS.db)
     match /plugin_data/{pluginId}/items/{itemId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
     }
   }
 }

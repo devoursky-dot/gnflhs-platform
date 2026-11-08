@@ -52,4 +52,8 @@ copyDir(path.join(rootDir, 'apps', 'whiteboard-note', 'dist'), path.join(portalD
 copyDir(path.join(rootDir, 'apps', 'account-manager', 'dist'), path.join(portalDist, 'account'));
 copyDir(path.join(rootDir, 'apps', 'dormitory-penalty', 'dist'), path.join(portalDist, 'dormitory'));
 
+if (fs.existsSync(path.join(rootDir, 'plugins'))) {
+  copyDir(path.join(rootDir, 'plugins'), path.join(portalDist, 'plugins'));
+}
+
 console.log('\n✓ Unified bundle completed successfully!');
