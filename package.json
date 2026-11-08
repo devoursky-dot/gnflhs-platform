@@ -13,7 +13,9 @@
     "dev:dormitory": "npm --prefix apps/dormitory-penalty run dev",
     "build:all": "node scripts/build-and-bundle.mjs",
     "deploy:firebase": "npm run build:all && npx firebase-tools deploy --only hosting,firestore",
+    "sync:scaffold": "node scripts/sync-plugins.mjs scaffold",
     "sync:push": "node scripts/sync-plugins.mjs push",
+    "sync:deploy": "node scripts/sync-plugins.mjs deploy",
     "sync:pull": "node scripts/sync-plugins.mjs pull",
     "sync:list": "node scripts/sync-plugins.mjs list"
   }

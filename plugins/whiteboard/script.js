@@ -1,108 +1,23 @@
 // ============================================================================
-// GNFLHS 전자칠판 필기 노트 (정식 배포본 v1.0.0)
-// - 삼성노트(Samsung Notes) REA 역추적 기반 손떨림 보정 (StrokeStabilizer)
-// - 구형 적외선/정전식 전자칠판용 속도 기반 가변 필압 엔진 (PressureEngine)
-// - 2차 베지에 곡선(Quadratic Bézier Spline) 벡터 렌더링 & 더블 버퍼링 캔버스
+// GNFLHS 전자칠판 필기 노트 (V2 ES Module + env.json 정식 배포본 v1.1.0)
+// - @gnflhs/canvas 공유 모듈: 삼성노트 REA 손떨림 보정 (StrokeStabilizer) · 가변 필압 (PressureEngine) · 2차 베지에 곡선 (drawSmoothStroke)
+// - env.json 선언형 환경변수로 기본 펜 색상/굵기/모눈/보정 계수 제어
 // ============================================================================
 
-class StrokeStabilizer {
-  constructor(smoothingFactor = 0.42) {
-    this.smoothingFactor = smoothingFactor;
-    this.history = [];
-  }
-  reset() {
-    this.history = [];
-  }
-  addPoint(rawPoint) {
-    if (this.history.length === 0) {
-      this.history.push(rawPoint);
-      return rawPoint;
-    }
-    const prev = this.history[this.history.length - 1];
-    const smoothX = prev.x + (rawPoint.x - prev.x) * this.smoothingFactor;
-    const smoothY = prev.y + (rawPoint.y - prev.y) * this.smoothingFactor;
-    const smoothPressure = prev.pressure + (rawPoint.pressure - prev.pressure) * 0.6;
-    const filtered = {
-      x: smoothX,
-      y: smoothY,
-      pressure: Math.max(0.05, Math.min(1.0, smoothPressure)),
-      time: rawPoint.time
-    };
-    this.history.push(filtered);
-    if (this.history.length > 10) this.history.shift();
-    return filtered;
-  }
-}
+import { env } from '@gnflhs/sdk';
+import { toast, getDevice, onDeviceChange } from '@gnflhs/ui';
+import { StrokeStabilizer, PressureEngine, drawSmoothStroke } from '@gnflhs/canvas';
 
-class PressureEngine {
-  constructor(baseWidth = 6) {
-    this.lastPoint = null;
-    this.setWidths(baseWidth);
-  }
-  setWidths(baseWidth) {
-    this.minWidth = Math.max(1, baseWidth * 0.4);
-    this.maxWidth = baseWidth * 1.6;
-  }
-  reset() {
-    this.lastPoint = null;
-  }
-  computeWidth(current, hardwarePressure = 0.5) {
-    if (hardwarePressure > 0 && hardwarePressure !== 0.5 && hardwarePressure <= 1.0) {
-      return this.minWidth + (this.maxWidth - this.minWidth) * Math.pow(hardwarePressure, 1.2);
-    }
-    if (!this.lastPoint) {
-      this.lastPoint = current;
-      return (this.minWidth + this.maxWidth) / 2;
-    }
-    const dx = current.x - this.lastPoint.x;
-    const dy = current.y - this.lastPoint.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const dt = Math.max(1, current.time - this.lastPoint.time);
-    const velocity = dist / dt;
-    this.lastPoint = current;
-
-    const speedFactor = Math.max(0, Math.min(1, velocity / 2.5));
-    const simulatedPressure = 1.0 - speedFactor * 0.65;
-    return this.minWidth + (this.maxWidth - this.minWidth) * simulatedPressure;
-  }
-}
-
-function drawSmoothStroke(ctx, points, color, width, isHighlighter = false) {
-  if (!points || points.length < 2) return;
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.globalAlpha = isHighlighter ? 0.35 : 1.0;
-  ctx.globalCompositeOperation = 'source-over';
-
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < points.length - 1; i++) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const midX = (p1.x + p2.x) / 2;
-    const midY = (p1.y + p2.y) / 2;
-    ctx.quadraticCurveTo(p1.x, p1.y, midX, midY);
-  }
-  const last = points[points.length - 1];
-  ctx.lineTo(last.x, last.y);
-  ctx.stroke();
-  ctx.restore();
-}
-
-// 상태 관리
 const staticCanvas = document.getElementById('staticCanvas');
 const activeCanvas = document.getElementById('activeCanvas');
 const sCtx = staticCanvas.getContext('2d');
 const aCtx = activeCanvas.getContext('2d');
 
 let currentTool = 'pen'; // 'pen' | 'highlighter' | 'eraser'
-let currentColor = '#FFFFFF';
-let currentWidth = 6;
-let showGrid = true;
-const boardThemes = ['#0f172a', '#143326', '#ffffff'];
+let currentColor = env.str('DEFAULT_PEN_COLOR', '#FFFFFF');
+let currentWidth = env.int('DEFAULT_PEN_WIDTH', 6);
+let showGrid = env.bool('SHOW_GRID_DEFAULT', true);
+const boardThemes = env.json('BOARD_THEMES', ['#0f172a', '#143326', '#ffffff']);
 let boardThemeIdx = 0;
 
 let history = [];
@@ -110,19 +25,16 @@ let redoStack = [];
 let isDrawing = false;
 let currentPoints = [];
 
-const stabilizer = new StrokeStabilizer(0.42);
+const stabilizer = new StrokeStabilizer(env.float('SMOOTHING_FACTOR', 0.42));
 const pressureEngine = new PressureEngine(currentWidth);
 
 function syncDeviceBadge() {
   const badge = document.getElementById('deviceBadge');
   if (!badge) return;
-  const dev = (window.GNFLHS && GNFLHS.ui) ? GNFLHS.ui.getDevice().toUpperCase() : 'PC';
-  badge.textContent = dev;
+  badge.textContent = getDevice().toUpperCase();
 }
 syncDeviceBadge();
-if (window.GNFLHS && GNFLHS.ui) {
-  GNFLHS.ui.onDeviceChange(syncDeviceBadge);
-}
+onDeviceChange(syncDeviceBadge);
 
 function updateUndoRedoButtons() {
   const btnUndo = document.getElementById('btnUndo');
@@ -238,7 +150,6 @@ function renderActiveStroke() {
 
   if (currentTool === 'eraser') {
     const last = currentPoints[currentPoints.length - 1];
-    // 실시간 지우개 적용
     sCtx.save();
     sCtx.globalCompositeOperation = 'destination-out';
     sCtx.lineWidth = currentWidth * 2.5;
@@ -250,7 +161,6 @@ function renderActiveStroke() {
     sCtx.stroke();
     sCtx.restore();
 
-    // 지우개 가이드 원 표시
     aCtx.save();
     aCtx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
     aCtx.lineWidth = 1.5;
@@ -264,7 +174,6 @@ function renderActiveStroke() {
   }
 }
 
-// 툴바 이벤트 연결
 function setActiveTool(tool) {
   currentTool = tool;
   document.getElementById('btnToolPen').classList.toggle('active', tool === 'pen');
@@ -345,7 +254,7 @@ document.getElementById('btnClear').onclick = () => {
   history = [];
   redoStack = [];
   redrawAllStaticStrokes();
-  if (window.GNFLHS && GNFLHS.ui) GNFLHS.ui.toast('칠판이 초기화되었습니다.');
+  toast('칠판이 초기화되었습니다.');
 };
 
 document.getElementById('btnSave').onclick = () => {
@@ -362,5 +271,5 @@ document.getElementById('btnSave').onclick = () => {
   link.download = `GNFLHS_전자칠판_${new Date().toISOString().slice(0, 10)}.png`;
   link.href = exportCanvas.toDataURL('image/png');
   link.click();
-  if (window.GNFLHS && GNFLHS.ui) GNFLHS.ui.toast('판서 이미지가 저장되었습니다.');
+  toast('판서 이미지가 저장되었습니다.', 'success');
 };

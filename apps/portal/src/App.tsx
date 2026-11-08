@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, loginWithGoogle, logout, isSuperAdmin, SUPER_ADMIN_EMAIL, checkRedirectResult } from '@gnflhs/shared-auth';
-import { AppPlugin, DeviceViewportType, StudioProject } from '@gnflhs/shared-types';
-import { subscribePlugins } from './services/pluginService';
 import {
-  cloneAppToStudioProject,
+  auth,
+  loginWithGoogle,
+  logout,
+  isSuperAdmin,
+  SUPER_ADMIN_EMAIL,
+  checkRedirectResult
+} from '@gnflhs/shared-auth';
+import { AppPlugin, DeviceViewportType, StudioProject } from '@gnflhs/shared-types';
+import { subscribePlugins, RESERVED_SYSTEM_IDS } from './services/pluginService';
+import {
+  openOrEnsureAppWorkspace,
   subscribeGlobalProperties,
   subscribeStudioProjects
 } from './services/studioService';
@@ -17,21 +24,17 @@ import {
   LayoutGrid,
   LogIn,
   LogOut,
-  ShieldCheck,
   PenTool,
   Users,
   ShieldAlert,
   Puzzle,
-  Sparkles,
   ExternalLink,
-  RefreshCw,
   Code2,
-  Zap,
   HardDrive,
   SlidersHorizontal,
   Eye,
   EyeOff,
-  Copy
+  Lock
 } from 'lucide-react';
 
 export default function App() {
@@ -40,7 +43,7 @@ export default function App() {
   const [studioProjects, setStudioProjects] = useState<StudioProject[]>([]);
   const [globalProperties, setGlobalProperties] = useState<Record<string, string>>({});
   const [studioInitialProjectId, setStudioInitialProjectId] = useState<string | null>(null);
-  const [devModeActive, setDevModeActive] = useState<boolean>(true); // 개발자 모드 기본 ON
+  const [devModeActive, setDevModeActive] = useState<boolean>(true);
   const [isManagerOpen, setIsManagerOpen] = useState(false);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [isStorageOpen, setIsStorageOpen] = useState(false);
@@ -80,17 +83,17 @@ export default function App() {
     return () => unsubStudio();
   }, [isAdmin]);
 
-  const handleCopyPluginToStudio = async (plugin: AppPlugin) => {
+  // 1:1 연결된 스튜디오 작업본(HEAD) 열기 (불필요한 사본 중복 생성 방지)
+  const handleOpenPluginInStudio = async (plugin: AppPlugin) => {
     try {
-      const cloned = await cloneAppToStudioProject(plugin, `${plugin.name} (사본)`);
-      setStudioInitialProjectId(cloned.id);
+      const workspace = await openOrEnsureAppWorkspace(plugin, studioProjects);
+      setStudioInitialProjectId(workspace.id);
       setIsStudioOpen(true);
     } catch (e: any) {
-      alert('사본 생성 오류: ' + (e?.message || e));
+      alert('스튜디오 작업본 열기 오류: ' + (e?.message || e));
     }
   };
 
-  // 새 탭 테스트 실행 모드 (?testRunner=<projectId>&device=pc|tablet|mobile)
   if (testRunnerProjectId) {
     return (
       <TestDeploymentRunner
@@ -110,10 +113,8 @@ export default function App() {
     }
   };
 
-  // 일반 유저는 'production'만 보이고, 관리자는 devModeActive 시 'development'도 함께 노출
   const visiblePlugins = plugins.filter((p) => {
-    // 계정관리는 최고관리자 전용 상단바에서만 접근하도록 런처 카드에서 제외
-    if (p.id === 'account-manager') return false;
+    if (RESERVED_SYSTEM_IDS.includes(p.id)) return false;
     if (p.status === 'disabled') return false;
     if (p.status === 'production') return true;
     if (p.status === 'development') {
@@ -124,64 +125,93 @@ export default function App() {
 
   const getPluginIcon = (name: string) => {
     switch (name) {
-      case 'PenTool': return <PenTool size={28} color="#2563eb" />;
-      case 'Users': return <Users size={28} color="#059669" />;
-      case 'ShieldAlert': return <ShieldAlert size={28} color="#dc2626" />;
-      default: return <Puzzle size={28} color="#7c3aed" />;
+      case 'PenTool':
+        return <PenTool size={28} color="#2563eb" />;
+      case 'LayoutGrid':
+        return <LayoutGrid size={28} color="#0284c7" />;
+      case 'Users':
+        return <Users size={28} color="#059669" />;
+      case 'ShieldAlert':
+        return <ShieldAlert size={28} color="#dc2626" />;
+      default:
+        return <Puzzle size={28} color="#7c3aed" />;
     }
   };
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'sans-serif', color: '#1e293b' }}>
       {/* 1. 상단 GNB */}
-      <header style={{
-        backgroundColor: '#fff',
-        borderBottom: '1px solid #e2e8f0',
-        padding: '16px 32px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
+      <header
+        style={{
+          backgroundColor: '#fff',
+          borderBottom: '1px solid #e2e8f0',
+          padding: '16px 32px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '10px',
-            backgroundColor: '#2563eb',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontWeight: 'bold',
-            fontSize: '18px'
-          }}>
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              backgroundColor: '#2563eb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontWeight: 'bold',
+              fontSize: '18px'
+            }}
+          >
             G
           </div>
           <div>
-            <h1 style={{ fontSize: '18px', fontWeight: 'bold' }}>GNFLHS 스마트 스쿨 플랫폼</h1>
-            <p style={{ fontSize: '12px', color: '#64748b' }}>플러그인 기반 모듈형 통합 포털</p>
+            <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>GNFLHS 스마트 스쿨 플랫폼</h1>
+            <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0 0' }}>
+              경남외국어고등학교 모듈형 통합 학습·생활 포털
+            </p>
           </div>
         </div>
 
-        {/* 사용자 상태 및 로그인/로그아웃 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           {currentUser ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
                   {isAdmin && (
-                    <span style={{ backgroundColor: '#fef3c7', color: '#b45309', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 'bold' }}>
+                    <span
+                      style={{
+                        backgroundColor: '#fef3c7',
+                        color: '#b45309',
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontWeight: 'bold'
+                      }}
+                    >
                       최고관리자
                     </span>
                   )}
-                  <span style={{ fontSize: '13px', fontWeight: 'bold' }}>{currentUser.displayName || currentUser.email}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 'bold' }}>
+                    {currentUser.displayName || currentUser.email}
+                  </span>
                 </div>
                 <span style={{ fontSize: '11px', color: '#94a3b8' }}>{currentUser.email}</span>
               </div>
               <button
                 onClick={() => logout()}
                 title="로그아웃"
-                style={{ padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', display: 'flex' }}
+                style={{
+                  padding: '8px',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  backgroundColor: '#fff',
+                  cursor: 'pointer',
+                  display: 'flex'
+                }}
               >
                 <LogOut size={16} color="#64748b" />
               </button>
@@ -209,28 +239,43 @@ export default function App() {
         </div>
       </header>
 
-      {/* 2. 최고관리자 전용 제어 바 */}
+      {/* 2. 최고관리자 전용 시스템 제어 콘솔 바 (계정관리 · 스튜디오 · 저장소 · 배포관리 격리) */}
       {isAdmin && (
-        <div style={{
-          backgroundColor: '#090d16',
-          color: '#e2e8f0',
-          padding: '8px 32px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderBottom: '1px solid #1e293b'
-        }}>
+        <div
+          style={{
+            backgroundColor: '#090d16',
+            color: '#e2e8f0',
+            padding: '8px 32px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: '1px solid #1e293b',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '11px', backgroundColor: '#2563eb', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
-              ADMIN
+            <span
+              style={{
+                fontSize: '11px',
+                backgroundColor: '#2563eb',
+                color: '#fff',
+                padding: '2px 8px',
+                borderRadius: '10px',
+                fontWeight: 'bold'
+              }}
+            >
+              SUPER ADMIN CONSOLE
             </span>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8', fontFamily: 'monospace' }}>{SUPER_ADMIN_EMAIL}</span>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#94a3b8', fontFamily: 'monospace' }}>
+              {SUPER_ADMIN_EMAIL}
+            </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <button
               onClick={() => setDevModeActive(!devModeActive)}
-              title={devModeActive ? 'BETA 모듈 표시 중 (클릭 시 숨김)' : 'BETA 모듈 숨김 (클릭 시 표시)'}
+              title={devModeActive ? 'BETA 검증 앱 포털 표시 중' : 'BETA 검증 앱 숨김 상태'}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -246,12 +291,12 @@ export default function App() {
               }}
             >
               {devModeActive ? <Eye size={14} /> : <EyeOff size={14} />}
-              <span>BETA</span>
+              <span>BETA 미리보기</span>
             </button>
 
             <button
               onClick={() => setIsStudioOpen(true)}
-              title="실시간 코드 개발 스튜디오"
+              title="앱 개발 · 환경변수(env.json) · 정식 배포 통합 스튜디오"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -267,28 +312,28 @@ export default function App() {
               }}
             >
               <Code2 size={15} />
-              <span>스튜디오</span>
+              <span>개발 스튜디오</span>
             </button>
 
             <button
-              onClick={() => window.location.href = '/account/'}
-              title="통합 계정관리 센터 (최고관리자 전용)"
+              onClick={() => setIsManagerOpen(true)}
+              title="배포된 앱 채널(LIVE/BETA) 및 사용자 권한 관리"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
                 padding: '6px 14px',
                 backgroundColor: '#1e293b',
-                color: '#34d399',
-                border: '1px solid #059669',
+                color: '#cbd5e1',
+                border: '1px solid #334155',
                 borderRadius: '8px',
                 fontSize: '12px',
                 fontWeight: 'bold',
                 cursor: 'pointer'
               }}
             >
-              <Users size={15} />
-              <span>계정 관리</span>
+              <SlidersHorizontal size={15} />
+              <span>배포 앱 관리</span>
             </button>
 
             <button
@@ -312,42 +357,52 @@ export default function App() {
               <span>저장소</span>
             </button>
 
+            <div style={{ width: '1px', height: '18px', backgroundColor: '#334155', margin: '0 2px' }} />
+
             <button
-              onClick={() => setIsManagerOpen(true)}
-              title="플러그인 모듈 관리자"
+              onClick={() => {
+                window.location.href = '/account/';
+              }}
+              title="최고관리자 전용 통합 계정관리 시스템 (일반 배포 카탈로그와 분리 보호됨)"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
                 padding: '6px 14px',
-                backgroundColor: '#1e293b',
-                color: '#cbd5e1',
-                border: '1px solid #334155',
+                backgroundColor: 'rgba(5, 150, 105, 0.15)',
+                color: '#34d399',
+                border: '1px solid #059669',
                 borderRadius: '8px',
                 fontSize: '12px',
                 fontWeight: 'bold',
                 cursor: 'pointer'
               }}
             >
-              <SlidersHorizontal size={15} />
-              <span>모듈 관리</span>
+              <Lock size={13} />
+              <span>통합 계정관리 (시스템 전용)</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* 3. 메인 콘텐츠: 플러그인 모듈 카드 그리드 */}
+      {/* 3. 메인 콘텐츠: 정식 배포 앱 런처 그리드 */}
       <main style={{ maxWidth: '1100px', margin: '32px auto', padding: '0 24px' }}>
-        <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a' }}>앱 및 서비스 런처</h2>
+        <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
+            앱 및 서비스 런처
+          </h2>
+          <span style={{ fontSize: '12px', color: '#64748b' }}>
+            운영 앱 {visiblePlugins.length}개 구동 중
+          </span>
         </div>
 
-        {/* 플러그인 카드 그리드 */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-          gap: '20px'
-        }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: '20px'
+          }}
+        >
           {visiblePlugins.map((p) => (
             <div
               key={p.id}
@@ -383,58 +438,55 @@ export default function App() {
               }}
             >
               <div>
-                {/* 상단 아이콘 및 상태 뱃지 */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                  <div style={{
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '14px',
-                    backgroundColor: '#f8fafc',
+                <div
+                  style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1px solid #f1f5f9'
-                  }}>
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: '16px'
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '14px',
+                      backgroundColor: '#f8fafc',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '1px solid #f1f5f9'
+                    }}
+                  >
                     {getPluginIcon(p.icon)}
                   </div>
 
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    {p.codeType === 'inline_html' && (
-                      <span style={{
-                        fontSize: '11px',
-                        fontWeight: 'bold',
-                        backgroundColor: '#dcfce7',
-                        color: '#15803d',
-                        padding: '3px 8px',
-                        borderRadius: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px'
-                      }}>
-                        <Zap size={11} /> 핫스왑
-                      </span>
-                    )}
-
                     {p.status === 'development' ? (
-                      <span style={{
-                        fontSize: '11px',
-                        fontWeight: 'bold',
-                        backgroundColor: '#fef3c7',
-                        color: '#b45309',
-                        padding: '3px 8px',
-                        borderRadius: '12px'
-                      }}>
-                        🟡 BETA
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          backgroundColor: '#fef3c7',
+                          color: '#b45309',
+                          padding: '3px 8px',
+                          borderRadius: '12px'
+                        }}
+                      >
+                        🟡 BETA 검증중
                       </span>
                     ) : (
-                      <span style={{
-                        fontSize: '11px',
-                        color: '#64748b',
-                        backgroundColor: '#f1f5f9',
-                        padding: '2px 6px',
-                        borderRadius: '4px'
-                      }}>
-                        v{p.version}
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: '#15803d',
+                          backgroundColor: '#dcfce7',
+                          padding: '3px 8px',
+                          borderRadius: '12px'
+                        }}
+                      >
+                        🟢 정식 v{p.version}
                       </span>
                     )}
 
@@ -442,27 +494,30 @@ export default function App() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleCopyPluginToStudio(p);
+                          handleOpenPluginInStudio(p);
                         }}
-                        title="이 운영 앱을 스튜디오 프로젝트로 복사하여 편집"
+                        title="스튜디오 작업본(HEAD)에서 편집"
                         style={{
                           border: '1px solid #e2e8f0',
                           backgroundColor: '#f8fafc',
-                          color: '#475569',
-                          padding: '5px',
+                          color: '#2563eb',
+                          padding: '5px 8px',
                           borderRadius: '7px',
                           cursor: 'pointer',
                           display: 'flex',
-                          alignItems: 'center'
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '11px',
+                          fontWeight: 700
                         }}
                       >
-                        <Copy size={13} />
+                        <Code2 size={13} />
+                        <span>편집</span>
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* 제목 및 설명 */}
                 <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px', color: '#1e293b' }}>
                   {p.name}
                 </h3>
@@ -471,17 +526,18 @@ export default function App() {
                 </p>
               </div>
 
-              {/* 하단 진입 화살표 */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingTop: '16px',
-                borderTop: '1px solid #f1f5f9',
-                fontSize: '13px',
-                fontWeight: 'bold',
-                color: '#2563eb'
-              }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingTop: '16px',
+                  borderTop: '1px solid #f1f5f9',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  color: '#2563eb'
+                }}
+              >
                 <span>앱 실행하기</span>
                 <ExternalLink size={16} />
               </div>
@@ -490,15 +546,14 @@ export default function App() {
         </div>
       </main>
 
-      {/* 플러그인 관리자 모달 */}
       <PluginManagerModal
         isOpen={isManagerOpen}
         onClose={() => setIsManagerOpen(false)}
         plugins={plugins}
-        onCopyToStudio={handleCopyPluginToStudio}
+        onOpenInStudio={handleOpenPluginInStudio}
+        onOpenNewStudioProject={() => setIsStudioOpen(true)}
       />
 
-      {/* 실시간 코드 개발 스튜디오 모달 */}
       <PluginDevStudioModal
         isOpen={isStudioOpen}
         onClose={() => {
@@ -512,13 +567,8 @@ export default function App() {
         initialProjectId={studioInitialProjectId}
       />
 
-      {/* 클라우드 저장소 매니저 모달 */}
-      <StorageExplorerModal
-        isOpen={isStorageOpen}
-        onClose={() => setIsStorageOpen(false)}
-      />
+      <StorageExplorerModal isOpen={isStorageOpen} onClose={() => setIsStorageOpen(false)} />
 
-      {/* 핫스왑된 플러그인 전체화면 런타임 러너 */}
       <DynamicRunnerModal
         plugin={activeDynamicPlugin}
         onClose={() => setActiveDynamicPlugin(null)}

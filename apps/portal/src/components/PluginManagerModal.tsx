@@ -1,281 +1,342 @@
-import React, { useState } from 'react';
-import { AppPlugin, PluginStatus } from '@gnflhs/shared-types';
-import { updatePlugin, seedDefaultPlugins, deletePlugin } from '../services/pluginService';
-import { Puzzle, X, Plus, RefreshCw, Copy, Trash2 } from 'lucide-react';
+import React from 'react';
+import { AppPlugin, PluginStatus, UserRole } from '@gnflhs/shared-types';
+import { updatePlugin, deletePlugin } from '../services/pluginService';
+import { Puzzle, X, Code2, Trash2, Rocket, Shield } from 'lucide-react';
 
 interface PluginManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
   plugins: AppPlugin[];
-  onCopyToStudio?: (plugin: AppPlugin) => void;
+  onOpenInStudio?: (plugin: AppPlugin) => void;
+  onOpenNewStudioProject?: () => void;
 }
-
-const CORE_SYSTEM_IDS = ['account-manager'];
 
 export const PluginManagerModal: React.FC<PluginManagerModalProps> = ({
   isOpen,
   onClose,
   plugins,
-  onCopyToStudio
+  onOpenInStudio,
+  onOpenNewStudioProject
 }) => {
-  const [isAddingNew, setIsAddingNew] = useState(false);
-  const [newId, setNewId] = useState('');
-  const [newName, setNewName] = useState('');
-  const [newDesc, setNewDesc] = useState('');
-  const [newUrl, setNewUrl] = useState('');
-  const [newVersion, setNewVersion] = useState('1.0.0');
-
   if (!isOpen) return null;
 
-  const handleToggleStatus = async (plugin: AppPlugin) => {
-    let nextStatus: PluginStatus = 'production';
-    if (plugin.status === 'production') nextStatus = 'development';
-    else if (plugin.status === 'development') nextStatus = 'disabled';
-    else nextStatus = 'production';
-
+  const handleChannelChange = async (plugin: AppPlugin, nextStatus: PluginStatus) => {
     await updatePlugin({
       ...plugin,
       status: nextStatus
     });
   };
 
-  const handleAddNew = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newId || !newName || !newUrl) return;
-
-    const plugin: AppPlugin = {
-      id: newId.toLowerCase().trim(),
-      name: newName.trim(),
-      description: newDesc.trim(),
-      icon: 'Puzzle',
-      category: 'utility',
-      version: newVersion.trim(),
-      status: 'development', // 신규 플러그인은 안전을 위해 기본 개발테스트 상태로 등록
-      entryUrl: newUrl.trim(),
-      allowedRoles: ['super_admin'],
-      updatedAt: Date.now()
-    };
-
-    await updatePlugin(plugin);
-    setIsAddingNew(false);
-    setNewId('');
-    setNewName('');
-    setNewDesc('');
-    setNewUrl('');
+  const handleToggleRole = async (plugin: AppPlugin, role: UserRole) => {
+    const current = new Set<UserRole>(
+      plugin.allowedRoles || ['super_admin', 'admin', 'teacher', 'student']
+    );
+    if (current.has(role)) {
+      current.delete(role);
+    } else {
+      current.add(role);
+    }
+    current.add('super_admin');
+    await updatePlugin({
+      ...plugin,
+      allowedRoles: Array.from(current)
+    });
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      width: '100vw',
-      height: '100vh',
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 200,
-      fontFamily: 'sans-serif'
-    }}>
-      <div style={{
-        backgroundColor: '#fff',
-        borderRadius: '16px',
-        width: '90%',
-        maxWidth: '700px',
-        maxHeight: '90vh',
-        overflowY: 'auto',
-        padding: '24px',
-        boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
-      }}>
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.55)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 200,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", sans-serif'
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: '#fff',
+          borderRadius: '16px',
+          width: '92%',
+          maxWidth: '780px',
+          maxHeight: '88vh',
+          overflowY: 'auto',
+          padding: '24px',
+          boxShadow: '0 20px 45px rgba(0,0,0,0.22)'
+        }}
+      >
         {/* 헤더 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Puzzle size={20} color="#7c3aed" />
-            <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b', margin: 0 }}>플러그인 모듈 관리</h2>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '14px',
+            borderBottom: '1px solid #f1f5f9',
+            paddingBottom: '14px'
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Puzzle size={20} color="#2563eb" />
+              <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                배포 앱 운영 채널 · 접근 권한 관리
+              </h2>
+            </div>
+            <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0' }}>
+              배포된 앱의 노출 채널(LIVE/BETA/중지)과 교사·학생 권한을 제어합니다. (최고관리자 전용 계정관리는 시스템 콘솔로 분리 보호됨)
+            </p>
           </div>
-          <button onClick={onClose} title="닫기" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}>
+          <button
+            onClick={onClose}
+            title="닫기"
+            style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px' }}
+          >
             <X size={18} color="#64748b" />
           </button>
         </div>
 
         {/* 플러그인 리스트 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
-          {plugins.map((p) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+          {plugins.length === 0 ? (
             <div
-              key={p.id}
               style={{
-                border: '1px solid #e2e8f0',
+                padding: '36px',
+                textAlign: 'center',
+                color: '#64748b',
+                backgroundColor: '#f8fafc',
                 borderRadius: '12px',
-                padding: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: p.status === 'disabled' ? '#f8fafc' : '#fff'
+                fontSize: '13px'
               }}
             >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                  <h4 style={{ fontSize: '15px', fontWeight: 'bold', color: p.status === 'disabled' ? '#94a3b8' : '#1e293b' }}>
-                    {p.name}
-                  </h4>
-                  <span style={{ fontSize: '11px', color: '#94a3b8', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>
-                    v{p.version}
-                  </span>
-                  <span style={{
-                    fontSize: '11px',
-                    fontWeight: 'bold',
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                    backgroundColor:
-                      p.status === 'production' ? '#dcfce7' :
-                      p.status === 'development' ? '#fef3c7' : '#f1f5f9',
-                    color:
-                      p.status === 'production' ? '#15803d' :
-                      p.status === 'development' ? '#b45309' : '#64748b'
-                  }}>
-                    {p.status === 'production' ? '🟢 정식 운영중' :
-                     p.status === 'development' ? '🟡 개발테스트중 (관리자 전용)' : '⚪ 비활성화됨'}
-                  </span>
-                </div>
-                <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0' }}>{p.description}</p>
-                <code style={{ fontSize: '11px', color: '#3b82f6' }}>경로: {p.entryUrl}</code>
-              </div>
-
-              {/* 액션 버튼 그룹 (복사 / 상태 전환 / 커스텀 앱 삭제) */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                {onCopyToStudio && (
-                  <button
-                    onClick={() => {
-                      onCopyToStudio(p);
-                      onClose();
-                    }}
-                    title="스튜디오 프로젝트로 복사하여 안전하게 편집"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '6px 10px',
-                      borderRadius: '8px',
-                      border: '1px solid #bfdbfe',
-                      backgroundColor: '#eff6ff',
-                      color: '#2563eb',
-                      fontSize: '12px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Copy size={13} />
-                    <span>복사</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={() => handleToggleStatus(p)}
-                  title="상태 전환 (정식 운영 ➔ 개발 테스트 ➔ 비활성화)"
+              현재 배포된 운영 앱이 없습니다. 개발 스튜디오에서 앱을 작성하고 정식 배포해 보세요.
+            </div>
+          ) : (
+            plugins.map((p) => {
+              const roles = p.allowedRoles || ['super_admin', 'admin', 'teacher', 'student'];
+              const depCount = (p.deployments || []).length;
+              return (
+                <div
+                  key={p.id}
                   style={{
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    padding: '16px',
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#fff',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
+                    flexDirection: 'column',
+                    gap: '12px',
+                    backgroundColor: p.status === 'disabled' ? '#f8fafc' : '#fff'
                   }}
                 >
-                  <RefreshCw size={12} color="#64748b" />
-                  <span>상태</span>
-                </button>
-
-                {!CORE_SYSTEM_IDS.includes(p.id) && (
-                  <button
-                    onClick={async () => {
-                      if (confirm(`'${p.name}' 앱을 목록에서 삭제하시겠습니까?`)) {
-                        await deletePlugin(p.id);
-                      }
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      flexWrap: 'wrap'
                     }}
-                    title="커스텀 앱 삭제"
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <h4
+                          style={{
+                            fontSize: '15px',
+                            fontWeight: 800,
+                            margin: 0,
+                            color: p.status === 'disabled' ? '#94a3b8' : '#0f172a'
+                          }}
+                        >
+                          {p.name}
+                        </h4>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: '#1d4ed8',
+                            backgroundColor: '#eff6ff',
+                            padding: '2px 7px',
+                            borderRadius: '6px',
+                            fontFamily: 'monospace'
+                          }}
+                        >
+                          v{p.version}
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#64748b' }}>
+                          스냅샷 {depCount}개 · ID: <code>{p.id}</code>
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>{p.description}</p>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {onOpenInStudio && (
+                        <button
+                          onClick={() => {
+                            onOpenInStudio(p);
+                            onClose();
+                          }}
+                          title="스튜디오 작업본(HEAD)에서 안전하게 코드 및 환경변수 편집"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #bfdbfe',
+                            backgroundColor: '#eff6ff',
+                            color: '#1d4ed8',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Code2 size={14} />
+                          <span>스튜디오 편집</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={async () => {
+                          if (
+                            confirm(
+                              `'${p.name}' 배포 앱을 포털 런처에서 영구 삭제하시겠습니까?\n(스튜디오 작업본 코드는 그대로 안전하게 유지됩니다.)`
+                            )
+                          ) {
+                            await deletePlugin(p.id);
+                          }
+                        }}
+                        title="포털 배포 목록에서 삭제"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '7px',
+                          borderRadius: '8px',
+                          border: '1px solid #fecaca',
+                          backgroundColor: '#fef2f2',
+                          color: '#dc2626',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 하단: 배포 채널 선택 + 접근 역할 체크 */}
+                  <div
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      padding: '7px',
-                      borderRadius: '8px',
-                      border: '1px solid #fecaca',
-                      backgroundColor: '#fef2f2',
-                      color: '#dc2626',
-                      cursor: 'pointer'
+                      justifyContent: 'space-between',
+                      paddingTop: '10px',
+                      borderTop: '1px solid #f1f5f9',
+                      flexWrap: 'wrap',
+                      gap: '10px'
                     }}
                   >
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>운영 채널:</span>
+                      {(
+                        [
+                          { id: 'production', label: '🟢 정식 운영 (LIVE)', activeBg: '#dcfce7', activeColor: '#15803d' },
+                          { id: 'development', label: '🟡 베타 검증 (BETA)', activeBg: '#fef3c7', activeColor: '#b45309' },
+                          { id: 'disabled', label: '⚪ 숨김 (중지)', activeBg: '#e2e8f0', activeColor: '#475569' }
+                        ] as Array<{ id: PluginStatus; label: string; activeBg: string; activeColor: string }>
+                      ).map((ch) => {
+                        const active = p.status === ch.id;
+                        return (
+                          <button
+                            key={ch.id}
+                            onClick={() => handleChannelChange(p, ch.id)}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '999px',
+                              border: active ? `1px solid ${ch.activeColor}` : '1px solid #e2e8f0',
+                              backgroundColor: active ? ch.activeBg : '#fff',
+                              color: active ? ch.activeColor : '#64748b',
+                              fontSize: '11px',
+                              fontWeight: active ? 700 : 500,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {ch.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <Shield size={12} /> 실행 대상:
+                      </span>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: '#334155' }}>
+                        <input
+                          type="checkbox"
+                          checked={roles.includes('teacher')}
+                          onChange={() => handleToggleRole(p, 'teacher')}
+                        />
+                        교사
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: '#334155' }}>
+                        <input
+                          type="checkbox"
+                          checked={roles.includes('student')}
+                          onChange={() => handleToggleRole(p, 'student')}
+                        />
+                        학생
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
 
-        {/* 신규 플러그인 등록 영역 */}
-        {isAddingNew ? (
-          <form onSubmit={handleAddNew} style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px dashed #cbd5e1', marginBottom: '16px' }}>
-            <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>새로운 모듈 플러그인 등록</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-              <input placeholder="모듈 ID (예: exam-timer)" value={newId} onChange={e => setNewId(e.target.value)} required style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
-              <input placeholder="표시 이름 (예: 모의고사 타이머)" value={newName} onChange={e => setNewName(e.target.value)} required style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
-            </div>
-            <input placeholder="설명" value={newDesc} onChange={e => setNewDesc(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', marginBottom: '10px', boxSizing: 'border-box' }} />
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px', marginBottom: '10px' }}>
-              <input placeholder="실행 경로 (예: /apps/timer/)" value={newUrl} onChange={e => setNewUrl(e.target.value)} required style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
-              <input placeholder="버전 (예: 1.0.0)" value={newVersion} onChange={e => setNewVersion(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button type="button" onClick={() => setIsAddingNew(false)} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#e2e8f0', fontSize: '12px', cursor: 'pointer' }}>취소</button>
-              <button type="submit" style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', backgroundColor: '#7c3aed', color: '#fff', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>등록하기</button>
-            </div>
-          </form>
-        ) : (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* 푸터: 스튜디오에서 신규 앱 제작 안내 */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            backgroundColor: '#f8fafc',
+            padding: '12px 16px',
+            borderRadius: '10px',
+            border: '1px solid #e2e8f0'
+          }}
+        >
+          <span style={{ fontSize: '12px', color: '#475569' }}>
+            신규 앱 제작 및 버전 업그레이드는 <strong>개발 스튜디오</strong> 파이프라인에서 일원화 관리됩니다.
+          </span>
+          {onOpenNewStudioProject && (
             <button
-              onClick={() => setIsAddingNew(true)}
+              onClick={() => {
+                onClose();
+                onOpenNewStudioProject();
+              }}
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '10px 16px',
+                padding: '8px 14px',
                 borderRadius: '8px',
                 border: 'none',
-                backgroundColor: '#7c3aed',
+                backgroundColor: '#2563eb',
                 color: '#fff',
-                fontSize: '13px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              <Plus size={16} /> 신규 플러그인 등록
-            </button>
-
-            <button
-              onClick={() => seedDefaultPlugins()}
-              title="초기 3대 모듈(전자칠판, 계정관리, 기숙사)을 DB에 복원"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                border: '1px solid #cbd5e1',
-                backgroundColor: '#fff',
-                color: '#64748b',
                 fontSize: '12px',
+                fontWeight: 700,
                 cursor: 'pointer'
               }}
             >
-              <RefreshCw size={14} /> 기본 모듈 시딩(복원)
+              <Rocket size={14} /> 스튜디오 열기
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

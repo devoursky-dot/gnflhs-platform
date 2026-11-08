@@ -169,7 +169,7 @@ export const DynamicRunnerModal: React.FC<DynamicRunnerModalProps> = ({
             key={`${reloadKey}-${deviceOverride}`}
             srcDoc={runtimeSrcDoc}
             title={plugin.name}
-            sandbox="allow-scripts allow-modals allow-same-origin allow-forms"
+            sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-downloads allow-popups"
             style={{
               width: '100%',
               height: '100%',

@@ -2,19 +2,20 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   setDoc,
   deleteDoc,
   onSnapshot
 } from 'firebase/firestore';
 import { db } from '@gnflhs/shared-auth';
-import { AppPlugin, StudioProject } from '@gnflhs/shared-types';
+import { AppPlugin, PluginDeployment, StudioProject } from '@gnflhs/shared-types';
 import {
   DEFAULT_LIBRARIES,
   DEFAULT_RUNTIME_CONFIG,
   DEFAULT_SCRIPT_PROPERTIES,
   DEFAULT_SERVICES,
-  getStarterFilesForPlugin
+  extractEnvFromFiles,
+  getStarterFilesForPlugin,
+  syncEnvJsonFile
 } from './studioCompiler';
 import { listStoragePath } from './storageService';
 
@@ -44,7 +45,7 @@ function removeLocalProjectMirror(projectId: string) {
       delete map[projectId];
       localStorage.setItem(LOCAL_PROJECTS_INDEX_KEY, JSON.stringify(map));
     }
-  } catch (e) {}
+  } catch {}
 }
 
 function loadLocalProjectsList(): StudioProject[] {
@@ -53,13 +54,13 @@ function loadLocalProjectsList(): StudioProject[] {
     if (!raw) return [];
     const map: Record<string, StudioProject> = JSON.parse(raw);
     return Object.values(map).sort((a, b) => b.updatedAt - a.updatedAt);
-  } catch (e) {
+  } catch {
     return [];
   }
 }
 
 /**
- * 스튜디오 미배포 프로젝트 실시간 구독
+ * 스튜디오 작업본(HEAD) 목록 실시간 구독
  */
 export function subscribeStudioProjects(callback: (projects: StudioProject[]) => void): () => void {
   try {
@@ -81,22 +82,19 @@ export function subscribeStudioProjects(callback: (projects: StudioProject[]) =>
         callback(loadLocalProjectsList());
       }
     );
-  } catch (e) {
+  } catch {
     callback(loadLocalProjectsList());
     return () => {};
   }
 }
 
-/**
- * 단일 스튜디오 프로젝트 조회 (새 탭 테스트 실행용: 로컬 즉시 로드 + Firestore 동기화)
- */
 export async function getStudioProjectById(projectId: string): Promise<StudioProject | null> {
   try {
     const localRaw = localStorage.getItem(`gnflhs_studio_draft_${projectId}`);
     if (localRaw) {
       return JSON.parse(localRaw) as StudioProject;
     }
-  } catch (e) {}
+  } catch {}
 
   try {
     const snap = await getDoc(doc(db, STUDIO_COLLECTION, projectId));
@@ -111,9 +109,6 @@ export async function getStudioProjectById(projectId: string): Promise<StudioPro
   return null;
 }
 
-/**
- * 단일 스튜디오 프로젝트 실시간 구독 (새 탭 실행 중 실시간 반영용)
- */
 export function subscribeSingleStudioProject(
   projectId: string,
   callback: (project: StudioProject | null) => void
@@ -123,7 +118,7 @@ export function subscribeSingleStudioProject(
     if (localRaw) {
       callback(JSON.parse(localRaw) as StudioProject);
     }
-  } catch (e) {}
+  } catch {}
 
   try {
     const docRef = doc(db, STUDIO_COLLECTION, projectId);
@@ -138,25 +133,39 @@ export function subscribeSingleStudioProject(
       },
       () => {}
     );
-  } catch (e) {
+  } catch {
     return () => {};
   }
 }
 
 /**
- * 새로운 빈 스튜디오 프로젝트 생성
+ * 새로운 독립 스튜디오 작업본(HEAD) 생성 (ES Module + env.json 기본 내장)
  */
-export async function createBlankStudioProject(name: string = '새 스튜디오 프로젝트'): Promise<StudioProject> {
+export async function createBlankStudioProject(
+  name: string = '새 스마트스쿨 앱',
+  customSlug?: string
+): Promise<StudioProject> {
   const now = Date.now();
-  const id = `proj-${now.toString(36)}`;
+  const slug = customSlug
+    ? customSlug.toLowerCase().trim().replace(/[^a-z0-9-_]/g, '-')
+    : now.toString(36);
+  const id = `proj-${slug}`;
+  const cleanName = name.trim() || '새 스마트스쿨 앱';
+  const starterFiles = getStarterFilesForPlugin(undefined, cleanName);
+  const mergedProps = {
+    ...DEFAULT_SCRIPT_PROPERTIES,
+    ...extractEnvFromFiles(starterFiles)
+  };
+  const files = syncEnvJsonFile(starterFiles, mergedProps);
+
   const project: StudioProject = {
     id,
-    name: name.trim() || '새 스튜디오 프로젝트',
-    description: '스튜디오에서 작성 중인 미배포 프로젝트',
+    name: cleanName,
+    description: `${cleanName} 스튜디오 작업본`,
     icon: 'Puzzle',
-    category: 'utility',
-    files: getStarterFilesForPlugin(undefined, name.trim() || '새 스튜디오 프로젝트'),
-    scriptProperties: { ...DEFAULT_SCRIPT_PROPERTIES },
+    category: 'classroom',
+    files,
+    scriptProperties: mergedProps,
     libraries: DEFAULT_LIBRARIES.map((l) => ({ ...l })),
     services: [...DEFAULT_SERVICES],
     runtimeConfig: { ...DEFAULT_RUNTIME_CONFIG },
@@ -169,39 +178,145 @@ export async function createBlankStudioProject(name: string = '새 스튜디오 
 }
 
 /**
- * 현재 구동중인 운영 앱을 수정하지 않고 안전한 스튜디오 프로젝트 사본으로 복제
+ * [핵심 V2 개선] 운영 앱과 1:1 연결된 작업본(HEAD) 열기 (불필요한 '(사본)' 중복 생성을 원천 방지)
+ * - 이미 연결된 스튜디오 작업본이 있으면 즉시 해당 작업본을 반환
+ * - 없으면 운영 앱의 최신 배포본을 기반으로 `proj-<appId>` 작업본을 1회 초기화하여 연결
+ */
+export async function openOrEnsureAppWorkspace(
+  sourceApp: AppPlugin,
+  existingProjects: StudioProject[] = []
+): Promise<StudioProject> {
+  const canonicalId = `proj-${sourceApp.id}`;
+  const matched =
+    existingProjects.find((p) => p.id === canonicalId) ||
+    existingProjects.find((p) => p.publishedPluginId === sourceApp.id) ||
+    (sourceApp.sourceStudioProjectId
+      ? existingProjects.find((p) => p.id === sourceApp.sourceStudioProjectId)
+      : undefined);
+
+  if (matched) {
+    // env.json 파일이 아직 없다면 자동 보장
+    if (!matched.files.some((f) => f.name === 'env.json')) {
+      const merged = { ...DEFAULT_SCRIPT_PROPERTIES, ...(matched.scriptProperties || {}) };
+      const synced = await saveStudioProject({
+        ...matched,
+        publishedPluginId: sourceApp.id,
+        files: syncEnvJsonFile(matched.files, merged),
+        scriptProperties: merged
+      });
+      return synced;
+    }
+    return matched;
+  }
+
+  // Firestore에 이미 있는지 한 번 더 확인
+  const remoteSnap = await getDoc(doc(db, STUDIO_COLLECTION, canonicalId));
+  if (remoteSnap.exists()) {
+    const data = remoteSnap.data() as StudioProject;
+    saveLocalProjectMirror(data);
+    return data;
+  }
+
+  const now = Date.now();
+  const baseFiles =
+    sourceApp.files && sourceApp.files.length > 0
+      ? sourceApp.files.map((f) => ({ ...f }))
+      : getStarterFilesForPlugin(sourceApp.id, sourceApp.name);
+
+  const mergedProps = {
+    ...DEFAULT_SCRIPT_PROPERTIES,
+    ...(sourceApp.scriptProperties || {}),
+    ...extractEnvFromFiles(baseFiles)
+  };
+  const syncedFiles = syncEnvJsonFile(baseFiles, mergedProps);
+
+  const workspace: StudioProject = {
+    id: canonicalId,
+    name: sourceApp.name,
+    description: sourceApp.description || `${sourceApp.name} 작업본`,
+    icon: sourceApp.icon || 'Puzzle',
+    category: sourceApp.category || 'classroom',
+    sourcePluginId: sourceApp.id,
+    publishedPluginId: sourceApp.id,
+    files: syncedFiles,
+    scriptProperties: mergedProps,
+    libraries:
+      sourceApp.libraries && sourceApp.libraries.length > 0
+        ? sourceApp.libraries.map((l) => ({ ...l }))
+        : DEFAULT_LIBRARIES.map((l) => ({ ...l })),
+    services: [...DEFAULT_SERVICES],
+    runtimeConfig: sourceApp.runtimeConfig
+      ? { ...sourceApp.runtimeConfig }
+      : { ...DEFAULT_RUNTIME_CONFIG },
+    createdAt: now,
+    updatedAt: now
+  };
+
+  saveLocalProjectMirror(workspace);
+  await setDoc(doc(db, STUDIO_COLLECTION, canonicalId), workspace);
+  return workspace;
+}
+
+/**
+ * 특정 배포 스냅샷의 소스코드를 현재 앱의 스튜디오 작업본(HEAD)으로 복원 (운영 LIVE는 건드리지 않음)
+ */
+export async function restoreSnapshotToWorkspace(
+  app: AppPlugin,
+  snapshot: PluginDeployment,
+  existingProjects: StudioProject[] = []
+): Promise<StudioProject> {
+  const workspace = await openOrEnsureAppWorkspace(app, existingProjects);
+  const mergedProps = {
+    ...DEFAULT_SCRIPT_PROPERTIES,
+    ...(snapshot.scriptProperties || {}),
+    ...extractEnvFromFiles(snapshot.files || [])
+  };
+  const syncedFiles = syncEnvJsonFile(
+    (snapshot.files || []).map((f) => ({ ...f })),
+    mergedProps
+  );
+
+  return saveStudioProject({
+    ...workspace,
+    files: syncedFiles,
+    scriptProperties: mergedProps,
+    libraries: snapshot.libraries?.length ? snapshot.libraries.map((l) => ({ ...l })) : workspace.libraries,
+    runtimeConfig: snapshot.runtimeConfig ? { ...snapshot.runtimeConfig } : workspace.runtimeConfig
+  });
+}
+
+/**
+ * 기존 앱을 완전히 새로운 별개의 앱으로 분기 복제할 때만 사용하는 명시적 Fork 함수
  */
 export async function cloneAppToStudioProject(
   sourceApp: AppPlugin,
   customName?: string
 ): Promise<StudioProject> {
   const now = Date.now();
-  const id = `proj-${sourceApp.id}-${now.toString().slice(-5)}`;
-  const projectName = customName?.trim() || `${sourceApp.name} (사본)`;
+  const id = `proj-fork-${now.toString(36)}`;
+  const projectName = customName?.trim() || `${sourceApp.name} (새 분기 앱)`;
 
-  const clonedFiles =
+  const baseFiles =
     sourceApp.files && sourceApp.files.length > 0
       ? sourceApp.files.map((f) => ({ ...f }))
-      : sourceApp.customCode
-      ? [
-          { name: 'index.html', content: sourceApp.customCode },
-          { name: 'script.js', content: '// custom script' },
-          { name: 'style.css', content: '/* custom style */' }
-        ]
-      : getStarterFilesForPlugin(sourceApp.id, sourceApp.name);
+      : getStarterFilesForPlugin(sourceApp.id, projectName);
+
+  const mergedProps = {
+    ...DEFAULT_SCRIPT_PROPERTIES,
+    ...(sourceApp.scriptProperties || {}),
+    ...extractEnvFromFiles(baseFiles),
+    APP_TITLE: projectName
+  };
+  const clonedFiles = syncEnvJsonFile(baseFiles, mergedProps);
 
   const project: StudioProject = {
     id,
     name: projectName,
-    description: sourceApp.description || `${sourceApp.name} 기반 스튜디오 작업본`,
+    description: `${sourceApp.name}에서 분기된 독립 프로젝트`,
     icon: sourceApp.icon || 'Puzzle',
     category: sourceApp.category || 'utility',
-    sourcePluginId: sourceApp.id,
     files: clonedFiles,
-    scriptProperties: {
-      ...DEFAULT_SCRIPT_PROPERTIES,
-      ...(sourceApp.scriptProperties || {})
-    },
+    scriptProperties: mergedProps,
     libraries:
       sourceApp.libraries && sourceApp.libraries.length > 0
         ? sourceApp.libraries.map((l) => ({ ...l }))
@@ -220,11 +335,20 @@ export async function cloneAppToStudioProject(
 }
 
 /**
- * 스튜디오 프로젝트 저장 (인메모리 즉시 로컬 동기화 + Firestore 영구 저장)
+ * 스튜디오 프로젝트 저장 (env.json <-> scriptProperties 양방향 자동 동기화 보장)
  */
 export async function saveStudioProject(project: StudioProject): Promise<StudioProject> {
+  const envFromFiles = extractEnvFromFiles(project.files);
+  const mergedProps = {
+    ...(project.scriptProperties || {}),
+    ...envFromFiles
+  };
+  const syncedFiles = syncEnvJsonFile(project.files, mergedProps);
+
   const updated: StudioProject = {
     ...project,
+    files: syncedFiles,
+    scriptProperties: mergedProps,
     updatedAt: Date.now()
   };
   saveLocalProjectMirror(updated);
@@ -232,17 +356,11 @@ export async function saveStudioProject(project: StudioProject): Promise<StudioP
   return updated;
 }
 
-/**
- * 스튜디오 미배포 프로젝트 삭제
- */
 export async function deleteStudioProject(projectId: string): Promise<void> {
   removeLocalProjectMirror(projectId);
   await deleteDoc(doc(db, STUDIO_COLLECTION, projectId));
 }
 
-/**
- * 플랫폼 전역 공유 스크립트 속성 구독 및 저장
- */
 export function subscribeGlobalProperties(
   callback: (props: Record<string, string>) => void
 ): () => void {
@@ -265,7 +383,7 @@ export function subscribeGlobalProperties(
         callback({ SCHOOL_NAME: '경남외국어고등학교', ACADEMIC_YEAR: '2026' });
       }
     );
-  } catch (e) {
+  } catch {
     callback({ SCHOOL_NAME: '경남외국어고등학교', ACADEMIC_YEAR: '2026' });
     return () => {};
   }
@@ -285,9 +403,6 @@ export interface CacheEntryInfo {
   expiresInSec: number;
 }
 
-/**
- * 프로젝트별 CacheService 상태 조회 및 초기화
- */
 export function listProjectCacheEntries(projectId: string): CacheEntryInfo[] {
   const prefix = `gnflhs_cache_${projectId}_`;
   const result: CacheEntryInfo[] = [];
@@ -310,7 +425,7 @@ export function listProjectCacheEntries(projectId: string): CacheEntryInfo[] {
         });
       }
     }
-  } catch (e) {}
+  } catch {}
   return result;
 }
 
@@ -327,7 +442,7 @@ export function clearProjectCache(projectId: string): number {
       localStorage.removeItem(k);
       removed++;
     });
-  } catch (e) {}
+  } catch {}
   return removed;
 }
 
@@ -345,40 +460,39 @@ export function attachRuntimeRpcBridge(): () => void {
     const reply = (result: unknown, error?: string) => {
       try {
         sourceWin.postMessage({ __gnflhs_rpc_res__: true, reqId, result, error }, '*');
-      } catch (e) {}
+      } catch {}
     };
 
+    // proj-xxx 스튜디오 작업본에서 실행해도 연결된 앱 ID의 DB 스코프를 일관되게 참조하도록 정규화
+    const normalizedScope = String(projectId || 'default').replace(/^proj-/, '');
+
     try {
-      const scopeId = String(projectId || 'default').replace(/[^a-zA-Z0-9_-]/g, '_');
       if (action === 'DB_GET') {
-        const key = String(args?.key || 'default');
-        const snap = await getDoc(doc(db, 'plugin_data', scopeId, 'items', key));
-        reply(snap.exists() ? snap.data()?.value ?? null : null);
+        const ref = doc(db, 'plugin_data', normalizedScope, 'items', String(args?.key || 'default'));
+        const snap = await getDoc(ref);
+        reply(snap.exists() ? snap.data().value : null);
       } else if (action === 'DB_SET') {
-        const key = String(args?.key || 'default');
-        await setDoc(doc(db, 'plugin_data', scopeId, 'items', key), {
-          value: args?.value ?? null,
-          updatedAt: Date.now()
-        });
+        const ref = doc(db, 'plugin_data', normalizedScope, 'items', String(args?.key || 'default'));
+        await setDoc(ref, { value: args?.value ?? null, updatedAt: Date.now() });
         reply(true);
       } else if (action === 'DB_REMOVE') {
-        const key = String(args?.key || 'default');
-        await deleteDoc(doc(db, 'plugin_data', scopeId, 'items', key));
+        const ref = doc(db, 'plugin_data', normalizedScope, 'items', String(args?.key || 'default'));
+        await deleteDoc(ref);
         reply(true);
       } else if (action === 'DB_LIST') {
-        const snap = await getDocs(collection(db, 'plugin_data', scopeId, 'items'));
+        const { getDocs } = await import('firebase/firestore');
+        const snap = await getDocs(collection(db, 'plugin_data', normalizedScope, 'items'));
         const items: Array<{ id: string; value: unknown }> = [];
-        snap.forEach((d) => items.push({ id: d.id, value: d.data()?.value }));
+        snap.forEach((d) => items.push({ id: d.id, value: d.data().value }));
         reply(items);
       } else if (action === 'STORAGE_LIST') {
-        const folder = String(args?.folder || 'shared');
-        const res = await listStoragePath(folder);
-        reply(res.files);
+        const files = await listStoragePath(String(args?.folder || 'shared'));
+        reply(files);
       } else {
         reply(null, `Unknown RPC action: ${action}`);
       }
     } catch (err: any) {
-      reply(null, err?.message || 'RPC Error');
+      reply(null, err?.message || String(err));
     }
   };
 

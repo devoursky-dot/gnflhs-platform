@@ -9,16 +9,23 @@
  * 7. 기기 로컬 캐시 100% 무손실 실시간 자동 저장
  */
 
-const STORAGE_KEY = 'gnflhs_seating_app_v1';
+import { env, db } from '@gnflhs/sdk';
+
+const STORAGE_KEY = env.str('STORAGE_KEY', 'gnflhs_seating_app_v1');
+const DEFAULT_CLASS = env.str('DEFAULT_CLASS_NAME', '1학년 2반');
+const DEFAULT_ZONES = env.int('DEFAULT_ZONES', 3);
+const DEFAULT_ROWS = env.int('DEFAULT_ROWS', 4);
+const DEFAULT_MAX_DESKS = env.int('DEFAULT_MAX_DESKS', 2);
+const DEFAULT_STUDENTS = env.int('DEFAULT_STUDENTS', 24);
 
 // 기본 탭 구조 생성
 function createDefaultTab(
-  title = '1학년 2반 일반배치',
-  className = '1학년 2반',
-  zoneCount = 3,
-  rowCount = 4,
-  maxDesks = 2,
-  totalStudents = 24
+  title = `${DEFAULT_CLASS} 일반배치`,
+  className = DEFAULT_CLASS,
+  zoneCount = DEFAULT_ZONES,
+  rowCount = DEFAULT_ROWS,
+  maxDesks = DEFAULT_MAX_DESKS,
+  totalStudents = DEFAULT_STUDENTS
 ) {
   const tabId = 'tab_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
@@ -88,8 +95,22 @@ function loadState() {
     console.warn('Failed to load local seating state:', e);
   }
 
-  const tab1 = createDefaultTab('1학년 2반 일반배치', '1학년 2반', 3, 4, 2, 24);
-  const tab2 = createDefaultTab('모둠 활동형 배치', '1학년 2반 (모둠)', 2, 3, 3, 24);
+  const tab1 = createDefaultTab(
+    `${DEFAULT_CLASS} 일반배치`,
+    DEFAULT_CLASS,
+    DEFAULT_ZONES,
+    DEFAULT_ROWS,
+    DEFAULT_MAX_DESKS,
+    DEFAULT_STUDENTS
+  );
+  const tab2 = createDefaultTab(
+    '모둠 활동형 배치',
+    `${DEFAULT_CLASS} (모둠)`,
+    2,
+    3,
+    3,
+    DEFAULT_STUDENTS
+  );
   appState.tabs = [tab1, tab2];
   appState.activeTabId = tab1.id;
   appState.isEditMode = false;
@@ -106,9 +127,7 @@ function saveState() {
       isEditMode: appState.isEditMode
     }));
 
-    if (window.GNFLHS && window.GNFLHS.db) {
-      window.GNFLHS.db.set('seating_layouts', appState.tabs).catch(() => {});
-    }
+    db.set('seating_layouts', appState.tabs).catch(() => {});
 
     const badge = document.getElementById('saveStatusBadge');
     if (badge) {
@@ -1229,7 +1248,7 @@ function initEventListeners() {
   };
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+function bootstrapSeatingApp() {
   loadState();
   initEventListeners();
   if (!appState.rosterOpen) {
@@ -1238,4 +1257,10 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('rosterSidebar').classList.remove('collapsed');
   }
   renderAll();
-});
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', bootstrapSeatingApp);
+} else {
+  bootstrapSeatingApp();
+}

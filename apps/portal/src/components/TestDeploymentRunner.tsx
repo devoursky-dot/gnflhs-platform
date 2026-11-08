@@ -292,7 +292,7 @@ export const TestDeploymentRunner: React.FC<TestDeploymentRunnerProps> = ({
             key={`${runKey}-${device}-${landscape}`}
             srcDoc={compiledSrc}
             title={project.name}
-            sandbox="allow-scripts allow-modals allow-same-origin allow-forms"
+            sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-downloads allow-popups"
             style={{
               width: '100%',
               height: '100%',
