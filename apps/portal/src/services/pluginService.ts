@@ -52,14 +52,18 @@ export function subscribePlugins(callback: (plugins: AppPlugin[]) => void): () =
   try {
     const colRef = collection(db, PLUGINS_COLLECTION);
     return onSnapshot(colRef, (snapshot) => {
-      if (snapshot.empty) {
-        // DB가 비어있으면 기본 플러그인 목록 반환
-        callback(DEFAULT_PLUGINS);
-      } else {
-        const list: AppPlugin[] = [];
-        snapshot.forEach((d) => list.push(d.data() as AppPlugin));
-        callback(list);
-      }
+      // 1. 기본 내장 코어 앱(전자칠판, 기숙사 상·벌점, 계정관리)을 베이스라인으로 보존
+      const map = new Map<string, AppPlugin>();
+      DEFAULT_PLUGINS.forEach((p) => map.set(p.id, p));
+
+      // 2. Firestore 컬렉션에 실제 등록/배포된 플러그인(좌석배치 등)으로 오버라이드 및 추가
+      snapshot.forEach((d) => {
+        const data = d.data() as AppPlugin;
+        const pid = data.id || d.id;
+        map.set(pid, { ...data, id: pid });
+      });
+
+      callback(Array.from(map.values()));
     }, (error) => {
       console.warn('Firestore offline fallback to default plugins:', error);
       callback(DEFAULT_PLUGINS);
