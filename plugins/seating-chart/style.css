@@ -966,6 +966,60 @@ body.edit-mode .zone-column {
   color: #38bdf8;
 }
 
+/* 긴 이름 자동 폭 조절 모드 선택 카드 */
+.print-fit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.fit-card-label {
+  cursor: pointer;
+  position: relative;
+}
+
+.fit-card-label input[type="radio"] {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  accent-color: var(--accent-blue);
+  cursor: pointer;
+}
+
+.fit-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  background-color: #0f172a;
+  border: 1.5px solid #1e293b;
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: left;
+  transition: all 0.15s ease;
+  min-height: 56px;
+}
+
+.fit-card-label input[type="radio"]:checked + .fit-card {
+  border-color: #38bdf8;
+  background-color: #0c2136;
+  box-shadow: 0 0 0 1px #38bdf8;
+}
+
+.fit-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.fit-preview-sub {
+  font-size: 10px;
+  font-weight: 500;
+  color: #94a3b8;
+  line-height: 1.25;
+}
+
 .print-page-hint {
   display: flex;
   align-items: center;
@@ -1191,6 +1245,14 @@ textarea {
   .desk-print-view .dp-item {
     display: none !important;
     width: 100%;
+    white-space: nowrap !important;
+    overflow: visible !important;
+  }
+
+  .desk-print-view .dp-main {
+    white-space: nowrap !important;
+    display: inline-block !important;
+    word-break: keep-all !important;
   }
 
   /* 포맷 1: 이름(번호) - 이름 강조 */

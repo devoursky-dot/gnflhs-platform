@@ -1109,6 +1109,7 @@ function initEventListeners() {
   };
   document.getElementById('btnExecutePrint').onclick = () => {
     const selectedFormat = document.querySelector('input[name="printDeskFormat"]:checked')?.value || 'name-num-bracket';
+    const fitMode = document.querySelector('input[name="printNameFitMode"]:checked')?.value || 'font-size';
     const withRoster = document.getElementById('chkPrintWithRoster').checked;
     const tab = getActiveTab();
     const rosterListContainer = document.getElementById('rosterListContainer');
@@ -1127,16 +1128,80 @@ function initEventListeners() {
       rosterListContainer.style.gridTemplateRows = '';
     }
 
+    // 3. 긴 이름 자동 폭 조절 계산 (줄바꿈 절대 방지 & 폰트비례축소 vs 가로장평압축)
+    const formatSelectorMap = {
+      'name-num-bracket': '.dp-format-bracket',
+      'num-name': '.dp-format-num-name',
+      'top-num-bot-name': '.dp-format-top-num-bot-name',
+      'top-name-bot-num': '.dp-format-top-name-bot-num'
+    };
+    const activeSelector = formatSelectorMap[selectedFormat] || '.dp-format-bracket';
+    const isTwoLine = selectedFormat.startsWith('top-');
+    const baseFontSize = isTwoLine ? 26 : 21;
+
+    // Canvas 정밀 텍스트 폭 측정기
+    const measureCanvas = document.createElement('canvas');
+    const measureCtx = measureCanvas.getContext('2d');
+    if (measureCtx) {
+      measureCtx.font = `900 ${baseFontSize}px -apple-system, BlinkMacSystemFont, "Pretendard", sans-serif`;
+    }
+
+    const modifiedElements = [];
+
+    document.querySelectorAll('.desk-card.assigned').forEach((card) => {
+      const item = card.querySelector(activeSelector);
+      if (!item) return;
+      const nameEl = item.querySelector('.dp-main');
+      if (!nameEl) return;
+
+      const studentName = nameEl.textContent.trim();
+      if (!studentName) return;
+
+      // 책상 카드 너비 88px 기준 가용 폭 산출
+      let maxAllowedWidth = 80;
+      if (!isTwoLine) {
+        // 단일 행 포맷(이름(번호) / 번호 이름)의 경우 번호 텍스트 폭 공제
+        const subEl = item.querySelector('.dp-sub');
+        const subText = subEl ? subEl.textContent.trim() : '';
+        const subWidth = subText ? (subText.length * 8 + 12) : 0;
+        maxAllowedWidth = Math.max(42, 80 - subWidth);
+      }
+
+      const textWidth = measureCtx ? measureCtx.measureText(studentName).width : (studentName.length * baseFontSize * 0.9);
+
+      if (textWidth > maxAllowedWidth && textWidth > 0) {
+        const ratio = maxAllowedWidth / textWidth;
+        if (fitMode === 'font-size') {
+          // [방식 1: 폰트 비례 축소] 글꼴 비율을 유지하며 크기만 자동 축소
+          const scaledSize = Math.max(11, Math.floor(baseFontSize * ratio));
+          nameEl.style.fontSize = `${scaledSize}px`;
+          nameEl.style.transform = '';
+        } else {
+          // [방식 2: 가로 장평 압축] 글자 높이는 26px 그대로 유지하고 가로폭만 홀쭉하게 압축
+          nameEl.style.transform = `scaleX(${ratio.toFixed(3)})`;
+          nameEl.style.transformOrigin = 'center center';
+          nameEl.style.display = 'inline-block';
+        }
+        modifiedElements.push(nameEl);
+      }
+    });
+
     printModal.classList.add('hidden');
 
-    // 3. 인쇄 완료 후 인라인 스타일 복원 이벤트 등록
+    // 4. 인쇄 완료 후 인라인 스타일 복원 이벤트 등록
     const handleAfterPrint = () => {
       rosterListContainer.style.gridTemplateRows = '';
+      modifiedElements.forEach((el) => {
+        el.style.fontSize = '';
+        el.style.transform = '';
+        el.style.transformOrigin = '';
+        el.style.display = '';
+      });
       window.removeEventListener('afterprint', handleAfterPrint);
     };
     window.addEventListener('afterprint', handleAfterPrint);
 
-    // 4. 브라우저 인쇄 다이얼로그 호출
+    // 5. 브라우저 인쇄 다이얼로그 호출
     window.print();
   };
 
